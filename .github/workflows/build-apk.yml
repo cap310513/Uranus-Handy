@@ -30,6 +30,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildozer-
 
+      - name: Debug-Signierschluessel zwischenspeichern (fuer gleichbleibende App-Signatur)
+        # Ohne das hier legt Gradle bei jedem Bau einen NEUEN, zufaelligen
+        # Debug-Schluessel an - jede neue APK-Version liesse sich dann nicht
+        # per Update installieren (Android meldet "signatures do not match"),
+        # man muesste die App jedes Mal erst deinstallieren. Bewusst ein
+        # fester Cache-Schluessel (nicht an buildozer.spec gekoppelt), damit
+        # derselbe Schluessel ueber alle zukuenftigen Baeue hinweg bestehen
+        # bleibt.
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+
       - name: System-Bibliotheken installieren
         run: |
           sudo apt-get update

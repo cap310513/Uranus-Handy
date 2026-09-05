@@ -16,17 +16,18 @@ version = 0.1
 # kivymd 2.0.0 requires_dist auf PyPI: kivy, pillow, materialyoucolor,
 # materialshapes, asynckivy).
 #
-# WICHTIG: pycairo IST doch noetig - live auf dem echten Handy per adb logcat
-# gefunden: sobald man IRGENDEINEN Knopf/Karte antippt (Hover-/State-Layer-
-# Verhalten in fast jedem M3-Widget), laedt KivyMD intern
-# kivymd.uix.list -> kivymd.uix.fitimage -> materialshapes.utils nach, das
-# zwingend "import cairo" braucht - ohne pycairo also ein Absturz bei JEDER
-# Beruehrung eines Knopfes. Zieht freetype/libcairo/libwebp als Bauregeln
-# nach sich - freetypes Standardquelle (download.savannah.gnu.org) ist
-# wiederholt (auch nach mehreren automatischen Versuchen) mit HTTP 502/504
-# ausgefallen. Deshalb eigene Bauregel in p4a-recipes/freetype mit
-# SourceForge als Quelle stattdessen (siehe p4a.local_recipes unten).
-requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,pycairo,requests,python-dotenv
+# WICHTIG: pycairo UND pillow sind noetig - live auf dem echten Handy per adb
+# logcat gefunden: sobald man IRGENDEINEN Knopf/Karte antippt (Hover-/State-
+# Layer-Verhalten in fast jedem M3-Widget), laedt KivyMD intern
+# kivymd.uix.list -> kivymd.uix.fitimage -> materialshapes nach, das
+# zwingend "import cairo" UND "import PIL" braucht - ohne die beiden also ein
+# Absturz bei JEDER Beruehrung eines Knopfes. pycairo zieht freetype/
+# libcairo/libwebp als Bauregeln nach sich - freetypes Standardquelle
+# (download.savannah.gnu.org) ist wiederholt (auch nach mehreren
+# automatischen Versuchen) mit HTTP 502/504 ausgefallen. Deshalb eigene
+# Bauregel in p4a-recipes/freetype mit SourceForge als Quelle stattdessen
+# (siehe p4a.local_recipes unten).
+requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,pycairo,pillow,requests,python-dotenv
 
 orientation = portrait
 fullscreen = 0
