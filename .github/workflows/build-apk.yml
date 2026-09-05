@@ -1,0 +1,30 @@
+name: Android-APK bauen
+
+# Baut die Android-Version komplett auf GitHubs eigenen Servern - auf dem
+# eigenen PC des Nutzers wird dabei nichts installiert oder veraendert.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: API-Key aus dem GitHub-Geheimnis in .env schreiben
+        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+
+      - name: Android-App bauen
+        id: buildozer
+        uses: ArtemSBulgakov/buildozer-action@v1
+        with:
+          buildozer_version: stable
+
+      - name: Fertige App-Datei als Download bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: uranus-apk
+          path: ${{ steps.buildozer.outputs.filename }}
