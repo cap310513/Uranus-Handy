@@ -10,13 +10,9 @@ version = 0.1
 
 # Bewusst schlank gehalten (nur reines Python) - vermeidet riskante
 # Cross-Compile-Schritte fuer kompilierte Abhaengigkeiten beim Android-Bau.
-# materialyoucolor fest angegeben: python-for-android baut aktuell zwingend
-# gegen Python 3.14 (bekannter, offener Fehler in python-for-android), und
-# ohne diese Angabe versucht pip eine Version zu installieren, die es fuer
-# 3.14 gar nicht gibt - das liess den vorigen Bau mit "ResolutionImpossible"
-# scheitern. 3.0.1 ist laut den p4a-Fehlermeldungen fuer 3.14 tatsaechlich
-# verfuegbar.
-requirements = python3,kivy,kivymd,materialyoucolor==3.0.1,requests,python-dotenv
+# materialyoucolor fest angegeben: kivymd 2.0.0 verlangt materialyoucolor>=3.0.3,
+# per PyPI direkt geprueft - 3.0.4 (neueste) hat ein fertiges Android-Paket.
+requirements = python3,kivy,kivymd,materialyoucolor==3.0.4,requests,python-dotenv
 
 orientation = portrait
 fullscreen = 0
