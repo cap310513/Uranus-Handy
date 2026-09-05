@@ -21,9 +21,11 @@ version = 0.1
 # Verhalten in fast jedem M3-Widget), laedt KivyMD intern
 # kivymd.uix.list -> kivymd.uix.fitimage -> materialshapes.utils nach, das
 # zwingend "import cairo" braucht - ohne pycairo also ein Absturz bei JEDER
-# Beruehrung eines Knopfes. Vorher entfernt, weil ein fremder Downloadserver
-# (download.savannah.gnu.org, fuer freetype) zweimal mit 502 scheiterte -
-# das war also ein falscher Verdacht, der Download klappt beim Wiederholen.
+# Beruehrung eines Knopfes. Zieht freetype/libcairo/libwebp als Bauregeln
+# nach sich - freetypes Standardquelle (download.savannah.gnu.org) ist
+# wiederholt (auch nach mehreren automatischen Versuchen) mit HTTP 502/504
+# ausgefallen. Deshalb eigene Bauregel in p4a-recipes/freetype mit
+# SourceForge als Quelle stattdessen (siehe p4a.local_recipes unten).
 requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,pycairo,requests,python-dotenv
 
 orientation = portrait
@@ -46,6 +48,10 @@ android.archs = arm64-v8a
 # das (sehr neue) Python 3.14 noch nicht - der develop-Zweig schon, nach dem
 # Vorbild desselben funktionierenden Beispielprojekts.
 p4a.branch = develop
+
+# Eigene freetype-Bauregel (siehe oben) statt der eingebauten - identisch,
+# nur mit SourceForge statt dem ausfallenden download.savannah.gnu.org.
+p4a.local_recipes = p4a-recipes
 
 [buildozer]
 log_level = 2
