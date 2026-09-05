@@ -14,11 +14,17 @@ version = 0.1
 # PyPI-Version von Kivy - das schlug bisher mit "ResolutionImpossible" fehl.
 # Die Einzelabhaengigkeiten von kivymd stehen deshalb einzeln hier (siehe
 # kivymd 2.0.0 requires_dist auf PyPI: kivy, pillow, materialyoucolor,
-# materialshapes, asynckivy). pycairo war ein Fehlgriff von mir (aus einem
-# fremden Beispielprojekt kopiert) - kivymd braucht das gar nicht, es hat nur
-# eine anfaellige, unnoetige Bibliothekskette (freetype/cairo/webp)
-# nachgezogen, an der ein fremder Server wiederholt mit 502 scheiterte.
-requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,requests,python-dotenv
+# materialshapes, asynckivy).
+#
+# WICHTIG: pycairo IST doch noetig - live auf dem echten Handy per adb logcat
+# gefunden: sobald man IRGENDEINEN Knopf/Karte antippt (Hover-/State-Layer-
+# Verhalten in fast jedem M3-Widget), laedt KivyMD intern
+# kivymd.uix.list -> kivymd.uix.fitimage -> materialshapes.utils nach, das
+# zwingend "import cairo" braucht - ohne pycairo also ein Absturz bei JEDER
+# Beruehrung eines Knopfes. Vorher entfernt, weil ein fremder Downloadserver
+# (download.savannah.gnu.org, fuer freetype) zweimal mit 502 scheiterte -
+# das war also ein falscher Verdacht, der Download klappt beim Wiederholen.
+requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,pycairo,requests,python-dotenv
 
 orientation = portrait
 fullscreen = 0
