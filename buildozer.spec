@@ -8,11 +8,13 @@ source.include_exts = py,png,jpg,kv,atlas,env
 
 version = 0.1
 
-# Bewusst schlank gehalten (nur reines Python) - vermeidet riskante
-# Cross-Compile-Schritte fuer kompilierte Abhaengigkeiten beim Android-Bau.
-# materialyoucolor fest angegeben: kivymd 2.0.0 verlangt materialyoucolor>=3.0.3,
-# per PyPI direkt geprueft - 3.0.4 (neueste) hat ein fertiges Android-Paket.
-requirements = python3,kivy,kivymd,materialyoucolor==3.0.4,requests,python-dotenv
+# kivymd kommt bewusst als Quellcode-Archiv (GitHub-Zip), nicht als PyPI-Paket:
+# Kivy selbst wird aus dem Quellcode gebaut (keine PyPI-Pakete dafuer
+# vorhanden), aber die normale kivymd-Installation verlangt trotzdem eine
+# PyPI-Version von Kivy - das schlug bisher mit "ResolutionImpossible" fehl.
+# Die Einzelabhaengigkeiten von kivymd stehen deshalb einzeln hier, nach dem
+# Vorbild eines echten, funktionierenden KivyMD-Android-Beispielprojekts.
+requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,pycairo,requests,python-dotenv
 
 orientation = portrait
 fullscreen = 0
@@ -29,6 +31,11 @@ android.sdk = 35
 android.minapi = 24
 
 android.archs = arm64-v8a
+
+# Die stabile python-for-android-Version kennt die noetigen Korrekturen fuer
+# das (sehr neue) Python 3.14 noch nicht - der develop-Zweig schon, nach dem
+# Vorbild desselben funktionierenden Beispielprojekts.
+p4a.branch = develop
 
 [buildozer]
 log_level = 2
