@@ -12,9 +12,13 @@ version = 0.1
 # Kivy selbst wird aus dem Quellcode gebaut (keine PyPI-Pakete dafuer
 # vorhanden), aber die normale kivymd-Installation verlangt trotzdem eine
 # PyPI-Version von Kivy - das schlug bisher mit "ResolutionImpossible" fehl.
-# Die Einzelabhaengigkeiten von kivymd stehen deshalb einzeln hier, nach dem
-# Vorbild eines echten, funktionierenden KivyMD-Android-Beispielprojekts.
-requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,pycairo,requests,python-dotenv
+# Die Einzelabhaengigkeiten von kivymd stehen deshalb einzeln hier (siehe
+# kivymd 2.0.0 requires_dist auf PyPI: kivy, pillow, materialyoucolor,
+# materialshapes, asynckivy). pycairo war ein Fehlgriff von mir (aus einem
+# fremden Beispielprojekt kopiert) - kivymd braucht das gar nicht, es hat nur
+# eine anfaellige, unnoetige Bibliothekskette (freetype/cairo/webp)
+# nachgezogen, an der ein fremder Server wiederholt mit 502 scheiterte.
+requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,requests,python-dotenv
 
 orientation = portrait
 fullscreen = 0
