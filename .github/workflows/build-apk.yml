@@ -2,6 +2,12 @@ name: Android-APK bauen
 
 # Baut die Android-Version komplett auf GitHubs eigenen Servern - auf dem
 # eigenen PC des Nutzers wird dabei nichts installiert oder veraendert.
+#
+# Laeuft direkt auf einem Ubuntu-Runner (kein Docker-Umweg mehr): eine
+# fertige Docker-Aktion ist am 2026-09-05 gescheitert, weil ihr Basis-Abbild
+# bereits auf ein brandneues Ubuntu ("Resolute") umgestellt hatte, dessen
+# Java-Paketquelle noch keine Freigabe dafuer hatte. ubuntu-22.04 ist bewusst
+# fest eingetragen (nicht "ubuntu-latest"), damit sich das nicht wiederholt.
 
 on:
   workflow_dispatch:
@@ -10,21 +16,55 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Buildozer-Zwischenspeicher (macht spaetere Baeue schneller)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
+      - name: System-Bibliotheken installieren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential git zip unzip autoconf libtool automake \
+            libltdl-dev m4 pkg-config zlib1g-dev libncurses5-dev \
+            libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev \
+            autopoint gettext libsqlite3-dev sqlite3 bzip2 libbz2-dev \
+            openssl libgdbm-dev libgdbm-compat-dev liblzma-dev \
+            libreadline-dev uuid-dev
+
+      - name: Java 17 einrichten (fuer Gradle noetig)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Buildozer installieren
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython==3.0.11
 
       - name: API-Key aus dem GitHub-Geheimnis in .env schreiben
         run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
 
       - name: Android-App bauen
-        id: buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        with:
-          buildozer_version: stable
+        run: yes | buildozer -v android debug
 
       - name: Fertige App-Datei als Download bereitstellen
         uses: actions/upload-artifact@v4
         with:
           name: uranus-apk
-          path: ${{ steps.buildozer.outputs.filename }}
+          path: bin/*.apk
