@@ -35,20 +35,36 @@ if _PROJEKT_WURZEL not in sys.path:
 
 from app.screens.briefing_screen import BriefingScreen  # noqa: E402
 from app.screens.chat_screen import ChatScreen  # noqa: E402
+from app.screens.settings_screen import SettingsScreen  # noqa: E402
 
 
 class UranusMobileApp(MDApp):
     def build(self):
-        self.theme_cls.primary_palette = "Blue"
+        # Indigo statt Blue als Standard - passt eher zu einem Weltraum-Namen
+        # wie "Uranus". In den Einstellungen frei aenderbar.
+        # ACHTUNG: "DeepPurple" NICHT verwenden (auch nicht in den
+        # Einstellungen anbieten) - live getestet, KivyMDs Farbberechnung
+        # stuerzt dabei ab ("invalid literal for int()"), genau wie bei
+        # "Amber", "DeepOrange" und "BlueGray". Betrifft offenbar jede
+        # Palette, deren erster Buchstabe im internen Farbnamen kollidiert -
+        # nicht mein Code, ein Fehler in KivyMD/materialyoucolor selbst.
+        self.theme_cls.primary_palette = "Indigo"
         self.theme_cls.theme_style = "Dark"
         if platform not in ("android", "ios"):
             Window.size = (412, 915)
+        # Ohne das hier schiebt sich auf dem echten Handy die Bildschirm-
+        # tastatur einfach ueber das Eingabefeld (und den ganzen Chatverlauf
+        # dahinter) statt die Ansicht hochzuschieben - genau das hat den
+        # Nutzer beim ersten echten Geraetetest ausgesperrt. Auf dem PC gibt
+        # es keine Bildschirmtastatur, deshalb ist das dort nie aufgefallen.
+        Window.softinput_mode = "below_target"
 
         wurzel = MDBoxLayout(orientation="vertical")
 
         self.screen_manager = MDScreenManager()
         self.screen_manager.add_widget(BriefingScreen())
         self.screen_manager.add_widget(ChatScreen())
+        self.screen_manager.add_widget(SettingsScreen())
         wurzel.add_widget(self.screen_manager)
 
         navigation = MDNavigationBar()
@@ -64,12 +80,19 @@ class UranusMobileApp(MDApp):
         chat_eintrag.add_widget(MDNavigationItemLabel(text="Chat"))
         navigation.add_widget(chat_eintrag)
 
+        einstellungen_eintrag = MDNavigationItem()
+        einstellungen_eintrag.add_widget(MDNavigationItemIcon(icon="cog"))
+        einstellungen_eintrag.add_widget(MDNavigationItemLabel(text="Einstellungen"))
+        navigation.add_widget(einstellungen_eintrag)
+
         wurzel.add_widget(navigation)
         return wurzel
 
+    _ZIELE = {"Daily Briefing": "briefing", "Chat": "chat",
+              "Einstellungen": "settings"}
+
     def _tab_gewechselt(self, bar, item, item_icon, item_text):
-        ziel = "briefing" if item_text == "Daily Briefing" else "chat"
-        self.screen_manager.current = ziel
+        self.screen_manager.current = self._ZIELE.get(item_text, "briefing")
 
 
 if __name__ == "__main__":

@@ -40,7 +40,7 @@ class _DatenKarte(MDCard):
         # Initialization failed" ab. Live auf dem PC getestet und genau so
         # reproduziert.
         super().__init__(
-            style="outlined", padding="14dp", spacing="6dp",
+            style="elevated", padding="14dp", spacing="6dp",
             orientation="vertical", size_hint_y=None, height="150dp",
             **kwargs,
         )

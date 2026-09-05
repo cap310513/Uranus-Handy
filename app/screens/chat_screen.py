@@ -14,8 +14,10 @@ import threading
 
 from kivy.clock import Clock
 from kivy.utils import escape_markup
+from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDIconButton
+from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.screen import MDScreen
@@ -75,11 +77,43 @@ class ChatScreen(MDScreen):
             self._anzeigen(nachricht["rolle"], nachricht["text"])
 
     def _anzeigen(self, rolle, text):
-        praefix = "Du" if rolle == "user" else "Uranus"
-        self._verlauf_liste.add_widget(MDLabel(
-            text=f"{praefix}: {_markdown_zu_kivy(text)}",
-            markup=True, adaptive_height=True,
+        """Baut eine Chat-Sprechblase - rechts/eingefaerbt fuer den Nutzer,
+        links/neutral fuer Uranus, statt einer schlichten Textzeile."""
+        ist_nutzer = rolle == "user"
+        theme = MDApp.get_running_app().theme_cls
+
+        zeile = MDBoxLayout(
+            orientation="horizontal", size_hint_y=None, adaptive_height=True,
+            padding=("48dp", "2dp", "8dp", "2dp") if ist_nutzer
+                    else ("8dp", "2dp", "48dp", "2dp"),
+        )
+        # Ein Fuellwidget links (Nutzer) bzw. rechts (Uranus) schiebt die
+        # Sprechblase an den passenden Bildschirmrand.
+        if ist_nutzer:
+            zeile.add_widget(MDBoxLayout())
+
+        # adaptive_height NICHT im Konstruktor von MDCard setzen: das stuerzt
+        # ab ("FBO Initialization failed"), weil MDCard dabei sofort einen
+        # Ripple/Schatten-Fbo mit der (noch kindlosen, also 0-hohen) Groesse
+        # anlegt - live getestet, exakt derselbe Fehler wie zuvor bei den
+        # Briefing-Karten. Deshalb: Konstruktor ohne adaptive_height, Kind
+        # zuerst hinzufuegen, adaptive_height danach setzen.
+        blase = MDCard(
+            style="elevated", padding="10dp", radius=[16, 16, 16, 16],
+            size_hint=(1, None), theme_bg_color="Custom",
+            md_bg_color=(theme.primaryContainerColor if ist_nutzer
+                        else theme.surfaceContainerHighColor),
+        )
+        blase.add_widget(MDLabel(
+            text=_markdown_zu_kivy(text), markup=True, adaptive_height=True,
         ))
+        blase.adaptive_height = True
+        zeile.add_widget(blase)
+
+        if not ist_nutzer:
+            zeile.add_widget(MDBoxLayout())
+
+        self._verlauf_liste.add_widget(zeile)
         self._scroll.scroll_y = 0
 
     def _senden(self):

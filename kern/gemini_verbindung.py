@@ -58,12 +58,52 @@ class KeinApiKey(RuntimeError):
     """Wird geworfen, wenn kein gueltiger Gemini-Schluessel gefunden wurde."""
 
 
+def _override_datei():
+    """
+    Schreibbarer Ort fuer einen selbst eingetragenen Schluessel (siehe
+    Einstellungen-Reiter) - der gebuendelte Projektordner ist auf Android
+    schreibgeschuetzt, genau wie bei kern/speicher.py.
+    """
+    try:
+        from kivy.app import App
+        app = App.get_running_app()
+        if app is not None:
+            os.makedirs(app.user_data_dir, exist_ok=True)
+            return os.path.join(app.user_data_dir, "gemini_api_key.txt")
+    except Exception:
+        pass
+    return None
+
+
+def hole_aktiven_schluessel():
+    """Zeigt den gerade aktiven Schluessel (fuer die Einstellungen-Anzeige)."""
+    pfad = _override_datei()
+    if pfad and os.path.exists(pfad):
+        try:
+            with open(pfad, "r", encoding="utf-8") as f:
+                eigener = f.read().strip()
+            if eigener:
+                return eigener
+        except Exception:
+            pass
+    return os.environ.get("GEMINI_API_KEY", "").strip()
+
+
+def speichere_api_key(schluessel):
+    """Traegt einen selbst eingegebenen Schluessel dauerhaft ein."""
+    pfad = _override_datei()
+    if not pfad:
+        raise RuntimeError("Kein beschreibbarer Speicherort gefunden.")
+    with open(pfad, "w", encoding="utf-8") as f:
+        f.write(schluessel.strip())
+
+
 def _hole_schluessel():
-    schluessel = os.environ.get("GEMINI_API_KEY", "").strip()
+    schluessel = hole_aktiven_schluessel()
     if not schluessel or schluessel == "hier_deinen_schluessel_einfuegen":
         raise KeinApiKey(
-            "Kein Gemini-API-Key gefunden. Siehe README.md, Abschnitt "
-            "'API-Key einrichten', um einen kostenlosen Schluessel einzutragen."
+            "Kein Gemini-API-Key gefunden. Trag ihn in den Einstellungen ein, "
+            "oder siehe README.md, Abschnitt 'API-Key einrichten'."
         )
     return schluessel
 
