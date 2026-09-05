@@ -2,23 +2,40 @@
 """
 Einfache lokale Speicherung des Chat-Verlaufs als JSON-Datei.
 
-Bewusst schlicht gehalten fuer Meilenstein 1 (nur PC-Test). Wenn die App
-spaeter wirklich auf dem Handy laeuft, zieht der Speicherort auf den
-Android-eigenen App-Datenordner um - das ist aber ein spaeterer Schritt.
+Nutzt den von Kivy bereitgestellten, garantiert beschreibbaren App-Datenordner
+(App.user_data_dir) - der zeigt auf dem PC in einen normalen Ordner, auf
+Android auf den privaten, beschreibbaren Speicherbereich der App. Der
+Projektordner selbst ist auf Android naemlich schreibgeschuetzt (Teil des
+Programmpakets), ein Schreibversuch dorthin waere schlicht wirkungslos.
 """
 import json
 import os
 
-_ORDNER = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_DATEI = os.path.join(_ORDNER, "chat_verlauf.json")
+_DATEINAME = "chat_verlauf.json"
+
+
+def _datei_pfad():
+    try:
+        from kivy.app import App
+        app = App.get_running_app()
+        if app is not None:
+            os.makedirs(app.user_data_dir, exist_ok=True)
+            return os.path.join(app.user_data_dir, _DATEINAME)
+    except Exception:
+        pass
+    # Fallback (z.B. ausserhalb einer laufenden App, beim Testen): Ordner
+    # oberhalb von kern/ - funktioniert auf dem PC, nicht auf Android.
+    ordner = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(ordner, _DATEINAME)
 
 
 def lade_verlauf():
     """Gibt die gespeicherten Nachrichten zurueck, oder eine leere Liste."""
-    if not os.path.exists(_DATEI):
+    pfad = _datei_pfad()
+    if not os.path.exists(pfad):
         return []
     try:
-        with open(_DATEI, "r", encoding="utf-8") as f:
+        with open(pfad, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return []
@@ -27,7 +44,7 @@ def lade_verlauf():
 def speichere_verlauf(nachrichten):
     """Schreibt die komplette Nachrichtenliste [{'rolle', 'text'}, ...] weg."""
     try:
-        with open(_DATEI, "w", encoding="utf-8") as f:
+        with open(_datei_pfad(), "w", encoding="utf-8") as f:
             json.dump(nachrichten, f, ensure_ascii=False, indent=2)
     except Exception as exc:
         print(f"[Speicher] Verlauf konnte nicht gesichert werden: {exc}")

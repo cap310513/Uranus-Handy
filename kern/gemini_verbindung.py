@@ -41,7 +41,17 @@ _API_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/{MODELL}:generateContent"
 )
 
-load_dotenv()
+# Absichtlich ein FESTER Pfad statt load_dotenv() ohne Argument: das wuerde vom
+# aktuellen Arbeitsverzeichnis aus nach oben durch die Ordner wandern, um eine
+# .env zu finden - auf Android ist das Dateisystem der App eingeschraenkt
+# (sandboxed), so eine Wanderung kann dort mit einem Fehler abbrechen und hat
+# die App vermutlich sofort abstuerzen lassen. Deshalb: exakter Pfad, und
+# jeder Fehler wird abgefangen statt die ganze App mitzureissen.
+try:
+    _PROJEKT_WURZEL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    load_dotenv(os.path.join(_PROJEKT_WURZEL, ".env"))
+except Exception as exc:
+    print(f"[Gemini] .env konnte nicht geladen werden: {exc}")
 
 
 class KeinApiKey(RuntimeError):
