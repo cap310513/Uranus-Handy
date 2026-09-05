@@ -23,7 +23,17 @@ from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.textfield import MDTextField, MDTextFieldHintText
 
-from kern import gemini_verbindung, speicher
+from kern import gemini_verbindung, live_daten, speicher
+
+
+def _daten_zu_satz(daten):
+    """Formt ein live_daten-Ergebnis (Wetter/Krypto/Weltgeschehen) zu einem
+    normalen Satz - dieselbe echte Zahl, die auch im Daily Briefing steht."""
+    if not daten.get("ok"):
+        return f"Dazu konnte ich gerade keine Daten holen ({daten.get('fehler', '')})."
+    zeilen = "; ".join(f"{name}: {wert}" for name, wert in daten.get("zeilen", []))
+    kopf = f"{daten.get('titel', '')}: {daten.get('wert', '')}."
+    return f"{kopf} {zeilen}." if zeilen else kopf
 
 
 def _markdown_zu_kivy(text):
@@ -125,12 +135,22 @@ class ChatScreen(MDScreen):
         self._anzeigen("user", text)
         self._merken("user", text)
 
+        # Fragen zu Wetter/Krypto/Weltgeschehen bekommen echte Zahlen statt
+        # eine Modell-Vermutung - Gemini hat keinen Internetzugriff und sagt
+        # das auch ehrlich ("dazu habe ich keinen Live-Ticker"), was fuer den
+        # Nutzer wie ein Fehler aussieht.
+        live_funktion = live_daten.erkenne_frage(text)
+
         def im_hintergrund():
             try:
-                if self._chat is None:
-                    self._chat = gemini_verbindung.neuer_chat()
-                antwort = gemini_verbindung.frage(self._chat, text)
-                fehler = None
+                if live_funktion is not None:
+                    antwort = _daten_zu_satz(live_funktion())
+                    fehler = None
+                else:
+                    if self._chat is None:
+                        self._chat = gemini_verbindung.neuer_chat()
+                    antwort = gemini_verbindung.frage(self._chat, text)
+                    fehler = None
             except gemini_verbindung.KeinApiKey as exc:
                 antwort, fehler = "", str(exc)
             except Exception as exc:

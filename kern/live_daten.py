@@ -148,3 +148,30 @@ def schlagzeilen(anzahl=4):
     return {"ok": True, "titel": "Weltgeschehen",
             "wert": f"{len(eintraege)} Meldungen", "zeilen": eintraege[:anzahl],
             "fehler": ""}
+
+
+# ----------------------------------------------------------------------
+# Frage-Erkennung fuer den Chat: manche Fragen sollen ECHTE Zahlen bekommen
+# statt Gemini raten zu lassen (das Modell hat keinen Internetzugriff und hat
+# genau das zugegeben: "dazu habe ich gerade keinen Live-Ticker").
+# ----------------------------------------------------------------------
+_WELTGESCHEHEN_WOERTER = ("welt", "weltgeschehen", "nachrichten", "news",
+                          "schlagzeilen", "was passiert", "aktuelles")
+_WETTER_WOERTER = ("wetter", "temperatur", "grad draußen", "regnet", "schneit")
+_KRYPTO_WOERTER = ("bitcoin", "ethereum", "krypto", "kryptowährung")
+
+
+def erkenne_frage(text):
+    """
+    Erkennt, ob eine Chat-Frage mit echten Live-Daten statt einer Modell-
+    Vermutung beantwortet werden sollte. Rueckgabe: eine der obigen
+    Funktionen (parameterlos aufrufbar) oder None.
+    """
+    low = (text or "").lower()
+    if any(wort in low for wort in _WELTGESCHEHEN_WOERTER):
+        return schlagzeilen
+    if any(wort in low for wort in _WETTER_WOERTER):
+        return wetter
+    if any(wort in low for wort in _KRYPTO_WOERTER):
+        return krypto
+    return None

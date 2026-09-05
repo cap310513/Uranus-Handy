@@ -33,12 +33,14 @@ class _DatenKarte(MDCard):
     Daten da sind."""
 
     def __init__(self, anzeigename, **kwargs):
-        # Bewusst eine FESTE Starthoehe statt adaptive_height=True: MDCard
-        # baut beim Erzeugen sofort einen Fbo (fuer Ripple/Schatten) auf -
-        # bei Groesse (0, 0) (was adaptive_height anfangs liefert, bevor der
-        # erste Kind-Widget gelayoutet ist) stuerzt das mit "FBO
-        # Initialization failed" ab. Live auf dem PC getestet und genau so
-        # reproduziert.
+        # adaptive_height NICHT im Konstruktor setzen: MDCard baut beim
+        # Erzeugen sofort einen Fbo (fuer Ripple/Schatten) auf - bei Groesse
+        # (0, 0), die adaptive_height dann liefert (noch keine Kinder da),
+        # stuerzt das mit "FBO Initialization failed" ab. Live getestet.
+        # Deshalb: erst eine feste Platzhalterhoehe, Kinder hinzufuegen,
+        # adaptive_height danach setzen - so passt sich die Karte spaeter
+        # wirklich der tatsaechlichen Zeilenzahl an (z.B. 4 Nachrichten
+        # brauchen mehr Platz als eine kurze Wetterzeile).
         super().__init__(
             style="elevated", padding="14dp", spacing="6dp",
             orientation="vertical", size_hint_y=None, height="150dp",
@@ -50,8 +52,16 @@ class _DatenKarte(MDCard):
             adaptive_height=True,
         )
         self._inhalt = MDLabel(text="Lädt ...", adaptive_height=True)
+        # Ohne text_size weiss ein Label nicht, bei welcher Breite es
+        # umbrechen soll - der Text wird dann nicht umgebrochen, sondern die
+        # Zeilen ueberlagern sich ("Buchstaben stehen uebereinander"). Live
+        # auf dem echten Handy gemeldet. Die Breite ist erst nach dem Layout
+        # bekannt, deshalb bei jeder Breitenaenderung neu setzen.
+        for label in (self._titel, self._inhalt):
+            label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
         self.add_widget(self._titel)
         self.add_widget(self._inhalt)
+        self.adaptive_height = True
 
     def zeige(self, daten):
         if not daten.get("ok"):
