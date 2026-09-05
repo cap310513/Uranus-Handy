@@ -61,7 +61,20 @@ jobs:
         run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
 
       - name: Android-App bauen
-        run: yes | buildozer -v android debug
+        # freetype wird von einem einzelnen, unzuverlaessigen Fremdserver
+        # geladen (download.savannah.gnu.org) - der ist schon mehrfach mit
+        # HTTP 502/504 ausgefallen, unabhaengig von unserem Code. Deshalb bis
+        # zu 3 Versuche mit steigender Wartezeit, bevor der Bau wirklich
+        # als gescheitert gilt.
+        run: |
+          for versuch in 1 2 3; do
+            if yes | buildozer -v android debug; then
+              exit 0
+            fi
+            echo "Versuch $versuch fehlgeschlagen, warte kurz und versuche es erneut ..."
+            sleep $((versuch * 30))
+          done
+          exit 1
 
       - name: Fertige App-Datei als Download bereitstellen
         uses: actions/upload-artifact@v4
