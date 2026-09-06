@@ -31,6 +31,27 @@ _PALETTEN = (
     ("Green", "4caf50"), ("Orange", "ff9800"), ("Red", "f44336"),
 )
 
+# HUD-Optik wie im Daily Briefing (briefing_screen.py) - sehr dunkles Navy
+# statt KivyMDs neutralem Grau, dazu ein duenner, leuchtender Kartenrand in
+# der jeweils gewaehlten Akzentfarbe.
+_HUD_HINTERGRUND = (0.03, 0.05, 0.09, 1)
+
+
+def _hud_karte(hoehe):
+    return MDCard(
+        style="outlined", orientation="vertical", padding="14dp",
+        spacing="10dp", size_hint_y=None, height=hoehe,
+        theme_bg_color="Custom", md_bg_color=_HUD_HINTERGRUND,
+    )
+
+
+def _hud_titel(text, theme):
+    return MDLabel(
+        text=f"◈ {text}", font_style="Title", role="medium",
+        adaptive_height=True, theme_text_color="Custom",
+        text_color=theme.primaryColor,
+    )
+
 
 class SettingsScreen(MDScreen):
     def __init__(self, **kwargs):
@@ -40,8 +61,9 @@ class SettingsScreen(MDScreen):
 
         wurzel = MDBoxLayout(orientation="vertical")
         wurzel.add_widget(MDLabel(
-            text="Einstellungen", font_style="Headline", role="small",
+            text="◈ Einstellungen", font_style="Headline", role="small",
             adaptive_height=True, padding=("16dp", "16dp", "16dp", "0dp"),
+            theme_text_color="Custom", text_color=app.theme_cls.primaryColor,
         ))
 
         liste = MDBoxLayout(
@@ -50,14 +72,9 @@ class SettingsScreen(MDScreen):
         )
 
         # ---- Design ----
-        design_karte = MDCard(
-            style="elevated", orientation="vertical", padding="14dp",
-            spacing="10dp", size_hint_y=None, height="190dp",
-        )
-        design_karte.add_widget(MDLabel(
-            text="Design", font_style="Title", role="medium",
-            adaptive_height=True,
-        ))
+        design_karte = _hud_karte("190dp")
+        design_karte.line_color = app.theme_cls.primaryColor
+        design_karte.add_widget(_hud_titel("Design", app.theme_cls))
 
         farbreihe = MDBoxLayout(
             orientation="horizontal", spacing="10dp",
@@ -90,14 +107,9 @@ class SettingsScreen(MDScreen):
         liste.add_widget(design_karte)
 
         # ---- Sprache ----
-        sprache_karte = MDCard(
-            style="elevated", orientation="vertical", padding="14dp",
-            spacing="10dp", size_hint_y=None, height="120dp",
-        )
-        sprache_karte.add_widget(MDLabel(
-            text="Sprache", font_style="Title", role="medium",
-            adaptive_height=True,
-        ))
+        sprache_karte = _hud_karte("120dp")
+        sprache_karte.line_color = app.theme_cls.primaryColor
+        sprache_karte.add_widget(_hud_titel("Sprache", app.theme_cls))
         vorlesen_reihe = MDBoxLayout(
             orientation="horizontal", size_hint_y=None, height="48dp",
         )
@@ -115,14 +127,9 @@ class SettingsScreen(MDScreen):
         liste.add_widget(sprache_karte)
 
         # ---- API-Schluessel ----
-        key_karte = MDCard(
-            style="elevated", orientation="vertical", padding="14dp",
-            spacing="10dp", size_hint_y=None, height="190dp",
-        )
-        key_karte.add_widget(MDLabel(
-            text="Gemini-API-Key", font_style="Title", role="medium",
-            adaptive_height=True,
-        ))
+        key_karte = _hud_karte("190dp")
+        key_karte.line_color = app.theme_cls.primaryColor
+        key_karte.add_widget(_hud_titel("Gemini-API-Key", app.theme_cls))
         self._key_feld = MDTextField(
             MDTextFieldHintText(text="API-Key"),
             mode="filled", multiline=False,

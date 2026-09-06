@@ -11,14 +11,22 @@ sich jedes Mal, wenn der Reiter geoeffnet wird.
 import threading
 
 from kivy.clock import Clock
+from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDIconButton
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
+from kivymd.uix.progressindicator import MDLinearProgressIndicator
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.screen import MDScreen
 
 from kern import live_daten, sprache
+
+# HUD-Optik nach Vorbild der "Lage"-Spalte der PC-Version (uranus_theme.py,
+# DEFAULT_PALETTE): sehr dunkles Navy statt KivyMDs neutralem Grau, dazu ein
+# duenner, in der Akzentfarbe leuchtender Kartenrand.
+_HUD_HINTERGRUND = (0.03, 0.05, 0.09, 1)
+_HUD_SPUR = (1, 1, 1, 0.08)
 
 # (Anzeigename, Abrufbare Funktion) - in dieser Reihenfolge dargestellt.
 _QUELLEN = (
@@ -42,14 +50,18 @@ class _DatenKarte(MDCard):
         # wirklich der tatsaechlichen Zeilenzahl an (z.B. 4 Nachrichten
         # brauchen mehr Platz als eine kurze Wetterzeile).
         super().__init__(
-            style="elevated", padding="14dp", spacing="6dp",
+            style="outlined", padding="14dp", spacing="8dp",
             orientation="vertical", size_hint_y=None, height="150dp",
+            theme_bg_color="Custom", md_bg_color=_HUD_HINTERGRUND,
             **kwargs,
         )
+        theme = MDApp.get_running_app().theme_cls
+        self.line_color = theme.primaryColor
         self.anzeigename = anzeigename
         self._titel = MDLabel(
-            text=anzeigename, font_style="Title", role="medium",
-            adaptive_height=True,
+            text=f"◈ {anzeigename}", font_style="Title", role="medium",
+            adaptive_height=True, theme_text_color="Custom",
+            text_color=theme.primaryColor,
         )
         self._inhalt = MDLabel(text="Lädt ...", adaptive_height=True)
         # Ohne text_size weiss ein Label nicht, bei welcher Breite es
@@ -61,19 +73,44 @@ class _DatenKarte(MDCard):
             label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
         self.add_widget(self._titel)
         self.add_widget(self._inhalt)
+
+        # Prozentanzeige - eine echte Kennzahl aus den Live-Daten (z.B.
+        # Luftfeuchte, Kursbewegung, erreichte Quellen), nicht erfunden. Nach
+        # dem Vorbild der Balken in der "Lage"-Spalte der PC-Version.
+        balken_zeile = MDBoxLayout(
+            orientation="horizontal", size_hint_y=None, height="18dp",
+            spacing="8dp",
+        )
+        self._balken_label = MDLabel(
+            text="", font_style="Label", role="small", adaptive_height=True,
+            theme_text_color="Secondary", size_hint_x=None, width="120dp",
+        )
+        self._balken = MDLinearProgressIndicator(
+            size_hint_y=None, height="6dp", radius=[3, 3, 3, 3],
+            value=0, indicator_color=theme.primaryColor, track_color=_HUD_SPUR,
+        )
+        balken_zeile.add_widget(self._balken_label)
+        balken_zeile.add_widget(self._balken)
+        self.add_widget(balken_zeile)
+
         self.adaptive_height = True
 
     def zeige(self, daten):
         if not daten.get("ok"):
             self._inhalt.text = f"Nicht erreichbar ({daten.get('fehler', '')})"
+            self._balken_label.text = ""
+            self._balken.value = 0
             return
-        self._titel.text = daten.get("titel", self.anzeigename)
+        self._titel.text = f"◈ {daten.get('titel', self.anzeigename)}"
         zeilen = [f"{name}: {wert}" for name, wert in daten.get("zeilen", [])]
         kopf = daten.get("wert", "")
         self._inhalt.text = "\n".join(([kopf] if kopf else []) + zeilen) or "Keine Daten."
+        prozent = daten.get("prozent", 0)
+        self._balken.value = prozent
+        self._balken_label.text = f"{daten.get('prozent_label', '')} {prozent}%"
 
     def text_zum_vorlesen(self):
-        return f"{self._titel.text}: {self._inhalt.text}".replace("\n", ". ")
+        return f"{self._titel.text}: {self._inhalt.text}".replace("\n", ". ").replace("◈", "")
 
 
 class BriefingScreen(MDScreen):
@@ -90,8 +127,9 @@ class BriefingScreen(MDScreen):
             padding=("16dp", "0dp"),
         )
         kopfzeile.add_widget(MDLabel(
-            text="Daily Briefing", font_style="Headline", role="small",
-            adaptive_height=True,
+            text="◈ Daily Briefing", font_style="Headline", role="small",
+            adaptive_height=True, theme_text_color="Custom",
+            text_color=MDApp.get_running_app().theme_cls.primaryColor,
         ))
         vorlesen_knopf = MDIconButton(icon="volume-high")
         vorlesen_knopf.bind(on_release=lambda *_: self._vorlesen())

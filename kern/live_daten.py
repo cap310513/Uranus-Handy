@@ -19,7 +19,7 @@ _USER_AGENT = "Uranus-Mobile/0.1"
 
 def _leer(titel, fehler):
     return {"ok": False, "titel": titel, "wert": "—", "zeilen": [],
-            "fehler": str(fehler)[:120]}
+            "fehler": str(fehler)[:120], "prozent": 0, "prozent_label": ""}
 
 
 def wetter(ort="Berlin", lat=52.52, lon=13.405):
@@ -57,9 +57,12 @@ def wetter(ort="Berlin", lat=52.52, lon=13.405):
         if hoch is not None and tief is not None:
             zeilen.append(("Heute", f"{tief:.0f} bis {hoch:.0f} Grad"))
 
+        luftfeuchte = jetzt.get("relative_humidity_2m")
         return {"ok": True, "titel": f"Wetter {ort}",
                 "wert": f"{grad:.1f}°" if grad is not None else "—",
-                "zeilen": zeilen, "fehler": ""}
+                "zeilen": zeilen, "fehler": "",
+                "prozent": round(luftfeuchte) if luftfeuchte is not None else 0,
+                "prozent_label": "Luftfeuchte"}
     except Exception as exc:
         return _leer(f"Wetter {ort}", exc)
 
@@ -76,20 +79,28 @@ def krypto(muenzen=("bitcoin", "ethereum"), waehrung="eur"):
         daten = antwort.json()
 
         zeilen = []
+        haupt_aenderung = 0.0
         for muenze in muenzen:
             eintrag = daten.get(muenze, {})
             if eintrag.get(waehrung) is None:
                 continue
             aenderung = eintrag.get(f"{waehrung}_24h_change") or 0.0
+            if muenze == muenzen[0]:
+                haupt_aenderung = aenderung
             zeilen.append((
                 muenze.title(),
                 f"{eintrag[waehrung]:,.0f} {waehrung.upper()} ({aenderung:+.1f} %)"
                 .replace(",", "."),
             ))
         haupt = daten.get(muenzen[0], {})
+        # Marktbewegung als Balken: 10% Tagesveraenderung fuellt den Balken
+        # ganz - eine echte Kennzahl (die tatsaechliche 24h-Veraenderung),
+        # keine erfundene Zahl.
         return {"ok": True, "titel": "Kryptowährungen",
                 "wert": f"{haupt.get(waehrung, 0):,.0f} {waehrung.upper()}".replace(",", "."),
-                "zeilen": zeilen, "fehler": ""}
+                "zeilen": zeilen, "fehler": "",
+                "prozent": min(100, round(abs(haupt_aenderung) * 10)),
+                "prozent_label": "Marktbewegung"}
     except Exception as exc:
         return _leer("Kryptowährungen", exc)
 
@@ -125,12 +136,14 @@ _FEEDS = [
 def schlagzeilen(anzahl=4):
     """Die neuesten Meldungen aus oeffentlichen RSS-Feeds - keine Erfindung."""
     eintraege = []
+    erreichte_quellen = 0
     for quelle, url in _FEEDS:
         try:
             antwort = requests.get(
                 url, headers={"User-Agent": _USER_AGENT}, timeout=_TIMEOUT)
             antwort.raise_for_status()
             wurzel = ET.fromstring(antwort.content)
+            erreichte_quellen += 1
             for item in wurzel.iter():
                 if not item.tag.endswith("item"):
                     continue
@@ -147,7 +160,9 @@ def schlagzeilen(anzahl=4):
         return _leer("Weltgeschehen", "Keine Meldungen erreichbar")
     return {"ok": True, "titel": "Weltgeschehen",
             "wert": f"{len(eintraege)} Meldungen", "zeilen": eintraege[:anzahl],
-            "fehler": ""}
+            "fehler": "",
+            "prozent": round(100 * erreichte_quellen / len(_FEEDS)),
+            "prozent_label": "Quellenabdeckung"}
 
 
 # ----------------------------------------------------------------------
