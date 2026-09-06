@@ -43,11 +43,19 @@ class _Sternenfeld(Widget):
         super().__init__(**kwargs)
         theme = MDApp.get_running_app().theme_cls
         self._punkte = []
+        self._tempo = 1.0
         with self.canvas:
-            Color(*theme.primaryColor[:3], 0.4)
+            self._farbe = Color(*theme.primaryColor[:3], 0.4)
             self._zeichnung = Point(pointsize=1.4)
         self.bind(pos=self._neu_verteilen, size=self._neu_verteilen)
         Clock.schedule_interval(self._takt, 1 / 12)
+
+    def set_aktiv(self, aktiv):
+        """Wird heller und schneller, waehrend Uranus 'nachdenkt' - ein
+        sichtbares Lebenszeichen statt eines stumpf gleichbleibenden
+        Hintergrunds waehrend der Wartezeit auf die Antwort."""
+        self._tempo = 2.4 if aktiv else 1.0
+        self._farbe.a = 0.75 if aktiv else 0.4
 
     def _neu_verteilen(self, *_args):
         if self.width <= 0 or self.height <= 0:
@@ -63,6 +71,7 @@ class _Sternenfeld(Widget):
         if not self._punkte:
             self._neu_verteilen()
             return
+        dt *= self._tempo
         flach = []
         for punkt in self._punkte:
             punkt[0] += punkt[2] * dt
@@ -139,22 +148,31 @@ class ChatScreen(MDScreen):
         zeile.add_widget(sende_knopf)
         wurzel.add_widget(zeile)
 
-        self.add_widget(_Sternenfeld())
+        self._sternenfeld = _Sternenfeld()
+        self._denk_label = None
+        self.add_widget(self._sternenfeld)
         self.add_widget(wurzel)
 
         for nachricht in speicher.lade_verlauf():
             self._anzeigen(nachricht["rolle"], nachricht["text"])
 
-    def _anzeigen(self, rolle, text):
-        """Baut eine Chat-Sprechblase - rechts/eingefaerbt fuer den Nutzer,
-        links/neutral fuer Uranus, statt einer schlichten Textzeile."""
+    def _anzeigen(self, rolle, text, vorlaeufig=False):
+        """
+        Baut eine Chat-Sprechblase - rechts fuer den Nutzer, links fuer
+        Uranus, per Farbe unterschieden. Bewusst NUR ein schmaler Rand statt
+        halber Bildschirmbreite (live als "zusammengequetscht" bemaengelt) -
+        die Blase darf fast die ganze Breite nutzen.
+        Gibt das Label zurueck, damit _senden() eine "denkt nach ..."-Blase
+        spaeter mit der echten Antwort ueberschreiben kann, statt eine neue
+        Blase darunterzusetzen.
+        """
         ist_nutzer = rolle == "user"
         theme = MDApp.get_running_app().theme_cls
 
         zeile = MDBoxLayout(
             orientation="horizontal", size_hint_y=None, adaptive_height=True,
-            padding=("48dp", "2dp", "8dp", "2dp") if ist_nutzer
-                    else ("8dp", "2dp", "48dp", "2dp"),
+            padding=("28dp", "2dp", "6dp", "2dp") if ist_nutzer
+                    else ("6dp", "2dp", "28dp", "2dp"),
         )
         # Ein Fuellwidget links (Nutzer) bzw. rechts (Uranus) schiebt die
         # Sprechblase an den passenden Bildschirmrand.
@@ -173,9 +191,12 @@ class ChatScreen(MDScreen):
             md_bg_color=(theme.primaryContainerColor if ist_nutzer
                         else theme.surfaceContainerHighColor),
         )
-        blase.add_widget(MDLabel(
+        label = MDLabel(
             text=_markdown_zu_kivy(text), markup=True, adaptive_height=True,
-        ))
+            theme_text_color="Secondary" if vorlaeufig else "Primary",
+            italic=vorlaeufig,
+        )
+        blase.add_widget(label)
         blase.adaptive_height = True
         zeile.add_widget(blase)
 
@@ -184,6 +205,7 @@ class ChatScreen(MDScreen):
 
         self._verlauf_liste.add_widget(zeile)
         self._scroll.scroll_y = 0
+        return zeile, label
 
     def _diktieren(self):
         """Startet Androids Diktier-Dialog - auf dem PC kommt sofort eine
@@ -205,6 +227,9 @@ class ChatScreen(MDScreen):
         self._eingabe.text = ""
         self._anzeigen("user", text)
         self._merken("user", text)
+        self._sternenfeld.set_aktiv(True)
+        _, self._denk_label = self._anzeigen("model", "Uranus denkt nach …",
+                                              vorlaeufig=True)
 
         # Fragen zu Wetter/Krypto/Weltgeschehen bekommen echte Zahlen statt
         # eine Modell-Vermutung - Gemini hat keinen Internetzugriff und sagt
@@ -232,10 +257,15 @@ class ChatScreen(MDScreen):
 
     def _antwort_da(self, antwort, fehler):
         self._sendet_gerade = False
+        self._sternenfeld.set_aktiv(False)
+        # Die "denkt nach ..."-Platzhalterblase wird mit der echten Antwort
+        # ueberschrieben, statt eine zweite Blase darunterzusetzen.
+        self._denk_label.text = _markdown_zu_kivy(fehler or antwort)
+        self._denk_label.theme_text_color = "Primary"
+        self._denk_label.italic = False
+        self._scroll.scroll_y = 0
         if fehler:
-            self._anzeigen("model", fehler)
             return
-        self._anzeigen("model", antwort)
         self._merken("model", antwort)
         sprache.vorlesen(_zum_vorlesen(antwort))
 

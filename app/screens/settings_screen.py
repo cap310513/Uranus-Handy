@@ -47,7 +47,7 @@ def _hud_karte(hoehe):
 
 def _hud_titel(text, theme):
     return MDLabel(
-        text=f"◈ {text}", font_style="Title", role="medium",
+        text=f"• {text}", font_style="Title", role="medium",
         adaptive_height=True, theme_text_color="Custom",
         text_color=theme.primaryColor,
     )
@@ -61,7 +61,7 @@ class SettingsScreen(MDScreen):
 
         wurzel = MDBoxLayout(orientation="vertical")
         wurzel.add_widget(MDLabel(
-            text="◈ Einstellungen", font_style="Headline", role="small",
+            text="• Einstellungen", font_style="Headline", role="small",
             adaptive_height=True, padding=("16dp", "16dp", "16dp", "0dp"),
             theme_text_color="Custom", text_color=app.theme_cls.primaryColor,
         ))

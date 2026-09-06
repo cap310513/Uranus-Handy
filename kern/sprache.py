@@ -116,6 +116,7 @@ def diktieren(erfolg_callback, fehler_callback=None):
 # Vorlesen (Sprachausgabe)
 # ----------------------------------------------------------------------
 _TTS_WIRD_ERSTELLT = False
+_TTS_BEREIT = False
 _TTS_FEHLGESCHLAGEN = False
 
 
@@ -129,8 +130,15 @@ def _tts_erstellen():
     normalen Funktionsaufrufs. Live auf dem Geraet getestet: ohne das hier
     blieb "Vorlesen" wirkungslos, ohne dass ueberhaupt ein Fehler auftauchte
     (der Motor wurde nie fertig, jeder speak()-Aufruf lief ins Leere).
+
+    WICHTIG: TextToSpeech(...) liefert das Motor-Objekt SOFORT zurueck, auch
+    wenn die eigentliche Initialisierung noch laeuft - erst der Rueckruf
+    onInit(status) sagt verlaesslich, ob der Motor wirklich bereit ist. Ein
+    speak()-Aufruf VOR diesem Rueckruf verschluckt sich live beobachtet
+    ebenfalls kommentarlos. Deshalb wird _TTS_BEREIT erst dort gesetzt, nicht
+    schon direkt nach dem Konstruktor.
     """
-    global _TTS_MOTOR, _TTS_FEHLGESCHLAGEN
+    global _TTS_MOTOR, _TTS_BEREIT, _TTS_FEHLGESCHLAGEN, _INIT_HOERER
     try:
         from jnius import PythonJavaClass, autoclass, java_method
 
@@ -144,11 +152,15 @@ def _tts_erstellen():
 
             @java_method("(I)V")
             def onInit(self, status):
-                pass
+                global _TTS_BEREIT, _TTS_FEHLGESCHLAGEN
+                if status == TextToSpeech.SUCCESS:
+                    _TTS_BEREIT = True
+                else:
+                    print(f"[Sprache] TextToSpeech-Init fehlgeschlagen (status={status})")
+                    _TTS_FEHLGESCHLAGEN = True
 
         # Der Hoerer muss am Leben bleiben, sonst raeumt Python ihn vorzeitig
         # weg und Android verliert die Rueckruf-Verbindung.
-        global _INIT_HOERER
         _INIT_HOERER = _InitHoerer()
         motor = TextToSpeech(PythonActivity.mActivity, _INIT_HOERER)
         motor.setLanguage(Locale.GERMANY)
@@ -165,22 +177,28 @@ def vorlesen(text, _versuch=0):
     if not text or not ist_android() or not ist_vorlesen_an() or _TTS_FEHLGESCHLAGEN:
         return
     try:
-        if _TTS_MOTOR is None:
+        if not _TTS_BEREIT:
             if not _TTS_WIRD_ERSTELLT:
                 _TTS_WIRD_ERSTELLT = True
                 from android.runnable import run_on_ui_thread
                 run_on_ui_thread(_tts_erstellen)()
-            # Der Motor braucht (asynchron, auf dem UI-Thread) einen kurzen
-            # Moment zum Starten - statt den allerersten Vorlesen-Aufruf
-            # stumm zu verschlucken, bis zu 2 Sekunden lang erneut versuchen.
-            if _versuch < 4:
+            # Der Motor braucht (asynchron, auf dem UI-Thread) einen Moment
+            # zum Starten - statt den allerersten Vorlesen-Aufruf stumm zu
+            # verschlucken, bis zu 10 Sekunden lang geduldig erneut versuchen
+            # (ein kalter Start des Sprachmotors kann laenger dauern als die
+            # zuvor zu knapp bemessenen 2 Sekunden).
+            if _versuch < 20:
                 from kivy.clock import Clock
                 Clock.schedule_once(
                     lambda dt: vorlesen(text, _versuch + 1), 0.5)
+            elif _versuch == 20:
+                print("[Sprache] TextToSpeech wurde nach 10s nicht bereit.")
             return
         from jnius import autoclass
         TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
-        _TTS_MOTOR.speak(text, TextToSpeech.QUEUE_FLUSH, None, None)
+        ergebnis = _TTS_MOTOR.speak(text, TextToSpeech.QUEUE_FLUSH, None, None)
+        if ergebnis != TextToSpeech.SUCCESS:
+            print(f"[Sprache] speak() meldet Fehler (Rueckgabewert {ergebnis})")
     except Exception as exc:
         print(f"[Sprache] Vorlesen fehlgeschlagen: {exc}")
 

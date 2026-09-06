@@ -62,7 +62,7 @@ class _DatenKarte(MDCard):
         self.line_color = theme.primaryColor
         self.anzeigename = anzeigename
         self._titel = MDLabel(
-            text=f"◈ {anzeigename}", font_style="Title", role="medium",
+            text=f"• {anzeigename}", font_style="Title", role="medium",
             adaptive_height=True, theme_text_color="Custom",
             text_color=theme.primaryColor,
         )
@@ -104,7 +104,7 @@ class _DatenKarte(MDCard):
             self._balken_label.text = ""
             self._balken.value = 0
             return
-        self._titel.text = f"◈ {daten.get('titel', self.anzeigename)}"
+        self._titel.text = f"• {daten.get('titel', self.anzeigename)}"
         zeilen = [f"{name}: {wert}" for name, wert in daten.get("zeilen", [])]
         kopf = daten.get("wert", "")
         self._inhalt.text = "\n".join(([kopf] if kopf else []) + zeilen) or "Keine Daten."
@@ -113,16 +113,16 @@ class _DatenKarte(MDCard):
         self._balken_label.text = f"{daten.get('prozent_label', '')} {prozent}%"
 
     def text_zum_vorlesen(self):
-        return f"{self._titel.text}: {self._inhalt.text}".replace("\n", ". ").replace("◈", "")
+        return f"{self._titel.text}: {self._inhalt.text}".replace("\n", ". ").replace("•", "")
 
 
 class _LageRadar(Widget):
     """
-    Kleine, ruhig pulsierende Radar-Grafik - angelehnt an die "Lage"-Spalte
-    der PC-Version (dort kreisen die Kacheln als Punkte um die Mitte). Rein
-    dekorativ, ohne echtes 3D (bewusst nicht auf dem Handy - siehe
-    uranus-mobile-5-regeln); die tatsaechlichen Werte stehen in der
-    Rangliste direkt darunter.
+    Kleine Radar-Grafik mit echtem, rotierendem Suchstrahl - angelehnt an die
+    "Lage"-Spalte der PC-Version (dort kreist ein Strahl um die Mitte, die
+    Kacheln stehen als feste Punkte drumherum). Rein dekorativ, ohne echtes
+    3D (bewusst nicht auf dem Handy - siehe uranus-mobile-5-regeln); die
+    tatsaechlichen Werte stehen in der Rangliste direkt darunter.
     """
 
     def __init__(self, **kwargs):
@@ -130,39 +130,44 @@ class _LageRadar(Widget):
         kwargs.setdefault("height", "110dp")
         super().__init__(**kwargs)
         theme = MDApp.get_running_app().theme_cls
-        self._takt = 0.0
+        self._winkel = 0.0
         self._mitte = (0, 0)
-        self._radius_basis = 0
+        self._radius_aussen = 0
         with self.canvas:
             Color(*theme.primaryColor[:3], 0.35)
             self._ring_aussen = Line(width=1.1)
             self._ring_innen = Line(width=1.1)
             Color(*theme.primaryColor[:3], 0.9)
             self._punkte = [Ellipse(size=(9, 9)) for _ in range(3)]
+            Color(*theme.primaryColor[:3], 0.8)
+            self._strahl = Line(width=1.4)
         self.bind(pos=self._neu_zeichnen, size=self._neu_zeichnen)
-        Clock.schedule_interval(self._puls, 1 / 20)
+        Clock.schedule_interval(self._drehen, 1 / 30)
 
     def _neu_zeichnen(self, *_args):
         cx, cy = self.center
         r_aussen = max(min(self.width, self.height) / 2 - 4, 1)
         self._ring_aussen.circle = (cx, cy, r_aussen)
         self._ring_innen.circle = (cx, cy, r_aussen * 0.55)
-        self._radius_basis = r_aussen * 0.78
+        self._radius_aussen = r_aussen
         self._mitte = (cx, cy)
-        self._positionieren()
-
-    def _positionieren(self):
-        cx, cy = self._mitte
         for i, punkt in enumerate(self._punkte):
             winkel = math.radians(90 + i * 120)
-            r = self._radius_basis + math.sin(self._takt + i) * 4
+            r = r_aussen * 0.78
             x = cx + math.cos(winkel) * r
             y = cy + math.sin(winkel) * r
             punkt.pos = (x - 4.5, y - 4.5)
+        self._strahl_zeichnen()
 
-    def _puls(self, dt):
-        self._takt += dt * 2
-        self._positionieren()
+    def _strahl_zeichnen(self):
+        cx, cy = self._mitte
+        ex = cx + math.cos(self._winkel) * self._radius_aussen
+        ey = cy + math.sin(self._winkel) * self._radius_aussen
+        self._strahl.points = [cx, cy, ex, ey]
+
+    def _drehen(self, dt):
+        self._winkel += dt * 1.3  # eine volle Umdrehung alle ~4.8s
+        self._strahl_zeichnen()
 
 
 class _Rangliste(MDBoxLayout):
@@ -210,7 +215,7 @@ class BriefingScreen(MDScreen):
             padding=("16dp", "0dp"),
         )
         kopfzeile.add_widget(MDLabel(
-            text="◈ Daily Briefing", font_style="Headline", role="small",
+            text="• Daily Briefing", font_style="Headline", role="small",
             adaptive_height=True, theme_text_color="Custom",
             text_color=MDApp.get_running_app().theme_cls.primaryColor,
         ))
@@ -239,7 +244,7 @@ class BriefingScreen(MDScreen):
         theme = MDApp.get_running_app().theme_cls
         lage_karte.line_color = theme.primaryColor
         lage_karte.add_widget(MDLabel(
-            text="◈ Lage", font_style="Title", role="medium",
+            text="• Lage", font_style="Title", role="medium",
             adaptive_height=True, theme_text_color="Custom",
             text_color=theme.primaryColor,
         ))
