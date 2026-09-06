@@ -27,6 +27,7 @@ from kivymd.uix.navigationbar import (  # noqa: E402
     MDNavigationBar, MDNavigationItem, MDNavigationItemIcon,
     MDNavigationItemLabel,
 )
+from kivymd.uix.screen import MDScreen  # noqa: E402
 from kivymd.uix.screenmanager import MDScreenManager  # noqa: E402
 
 _PROJEKT_WURZEL = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -35,10 +36,15 @@ if _PROJEKT_WURZEL not in sys.path:
 
 from app.screens.briefing_screen import BriefingScreen  # noqa: E402
 from app.screens.chat_screen import ChatScreen  # noqa: E402
+from app.screens.login_screen import LoginScreen  # noqa: E402
 from app.screens.settings_screen import SettingsScreen  # noqa: E402
+from app.screens.welcome_back_screen import WelcomeBackScreen  # noqa: E402
+from kern import konten  # noqa: E402
 
 
 class UranusMobileApp(MDApp):
+    aktueller_nutzer = None
+
     def build(self):
         # Indigo statt Blue als Standard - passt eher zu einem Weltraum-Namen
         # wie "Uranus". In den Einstellungen frei aenderbar.
@@ -59,6 +65,26 @@ class UranusMobileApp(MDApp):
         # es keine Bildschirmtastatur, deshalb ist das dort nie aufgefallen.
         Window.softinput_mode = "below_target"
 
+        self.root_manager = MDScreenManager()
+        self.root_manager.add_widget(LoginScreen(on_erfolg=self._angemeldet))
+        self.root_manager.add_widget(
+            WelcomeBackScreen(on_weiter=self._angemeldet, on_anders=self._zu_login)
+        )
+        self.root_manager.add_widget(self._baue_hauptbereich())
+
+        gemerkt = konten.gemerkter_name()
+        if gemerkt:
+            self.root_manager.get_screen("welcome_back").setze_name(gemerkt)
+            self.root_manager.current = "welcome_back"
+        else:
+            self.root_manager.current = "login"
+
+        return self.root_manager
+
+    def _baue_hauptbereich(self):
+        """Die drei bekannten Reiter, jetzt als eigener Screen hinter dem
+        Login - vorher war das direkt der Wurzel-Widget-Baum."""
+        haupt = MDScreen(name="haupt")
         wurzel = MDBoxLayout(orientation="vertical")
 
         self.screen_manager = MDScreenManager()
@@ -86,7 +112,15 @@ class UranusMobileApp(MDApp):
         navigation.add_widget(einstellungen_eintrag)
 
         wurzel.add_widget(navigation)
-        return wurzel
+        haupt.add_widget(wurzel)
+        return haupt
+
+    def _angemeldet(self, name):
+        self.aktueller_nutzer = name
+        self.root_manager.current = "haupt"
+
+    def _zu_login(self):
+        self.root_manager.current = "login"
 
     _ZIELE = {"Daily Briefing": "briefing", "Chat": "chat",
               "Einstellungen": "settings"}
