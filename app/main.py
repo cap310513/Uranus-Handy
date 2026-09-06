@@ -39,7 +39,7 @@ from app.screens.chat_screen import ChatScreen  # noqa: E402
 from app.screens.login_screen import LoginScreen  # noqa: E402
 from app.screens.settings_screen import SettingsScreen  # noqa: E402
 from app.screens.welcome_back_screen import WelcomeBackScreen  # noqa: E402
-from kern import konten  # noqa: E402
+from kern import konten, system_raender  # noqa: E402
 
 
 class UranusMobileApp(MDApp):
@@ -72,6 +72,21 @@ class UranusMobileApp(MDApp):
         )
         self.root_manager.add_widget(self._baue_hauptbereich())
 
+        # Aeusserer Rahmen um alle Bildschirme (Login/Welcome-Back/Haupt):
+        # haelt Androids Status- und System-Navigationsleiste fern (siehe
+        # kern/system_raender.py - live auf einem Samsung Galaxy S25 FE als
+        # Ueberlappung gemeldet) UND traegt den einzigen App-weiten
+        # Hintergrund, der theme_style folgt. Ohne Letzteres blieb der
+        # Hintergrund beim Wechsel in den hellen Modus dunkel, waehrend nur
+        # einzelne Widgets (Textfelder etc. mit eigener KV-Bindung an die
+        # Theme-Farben) hell wurden - live genau so gemeldet.
+        self._rahmen = MDBoxLayout(orientation="vertical", theme_bg_color="Custom")
+        self._rahmen.md_bg_color = self.theme_cls.backgroundColor
+        self._rahmen.add_widget(self.root_manager)
+        system_raender.registriere(self._insets_geaendert)
+        self.theme_cls.bind(theme_style=self._theme_geaendert,
+                             primary_palette=self._theme_geaendert)
+
         gemerkt = konten.gemerkter_name()
         if gemerkt:
             self.root_manager.get_screen("welcome_back").setze_name(gemerkt)
@@ -79,7 +94,22 @@ class UranusMobileApp(MDApp):
         else:
             self.root_manager.current = "login"
 
-        return self.root_manager
+        return self._rahmen
+
+    def _insets_geaendert(self, oben_px, unten_px):
+        """Rueckruf aus system_raender.registriere() - oben_px/unten_px sind
+        Androids tatsaechliche Status-/Navigationsleisten-Hoehe in Pixeln
+        (auf dem PC immer 0)."""
+        self._rahmen.padding = [0, oben_px, 0, unten_px]
+
+    def _theme_geaendert(self, *_args):
+        """Wird bei jedem Hell/Dunkel- oder Farbwechsel aufgerufen (siehe
+        settings_screen.py) - aktualisiert alles, was seine Farbe als festen
+        Python-Wert statt als KV-Bindung gesetzt hat und deshalb nicht von
+        selbst mitzieht."""
+        self._rahmen.md_bg_color = self.theme_cls.backgroundColor
+        self.screen_manager.get_screen("briefing").aktualisiere_theme()
+        self.screen_manager.get_screen("settings").aktualisiere_theme()
 
     def _baue_hauptbereich(self):
         """Die drei bekannten Reiter, jetzt als eigener Screen hinter dem

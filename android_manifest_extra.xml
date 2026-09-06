@@ -1,0 +1,23 @@
+<!--
+    Wird von buildozer/python-for-android direkt in das <manifest>-Element
+    von AndroidManifest.xml eingefuegt (siehe buildozer.spec:
+    android.extra_manifest_xml).
+
+    Grund: Seit Android 11 (API 30) sieht eine App standardmaessig NICHT
+    mehr automatisch, welche anderen Apps/Dienste auf dem Geraet installiert
+    sind ("package visibility") - dazu gehoert auch der System-Sprachausgabe-
+    Dienst (TextToSpeech). Ohne diesen <queries>-Eintrag kann
+    TextToSpeech(...) auf so einem Geraet scheitern (onInit(ERROR)), OBWOHL
+    ein TTS-Motor installiert ist - live genau so auf einem Samsung Galaxy
+    gemeldet ("Antworten laut vorlesen" tut nichts). Die Spracherkennung
+    (Diktieren, siehe kern/sprache.py) ist aus demselben Grund mit
+    aufgenommen.
+-->
+<queries>
+    <intent>
+        <action android:name="android.intent.action.TTS_SERVICE" />
+    </intent>
+    <intent>
+        <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+    </intent>
+</queries>

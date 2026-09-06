@@ -35,6 +35,13 @@ fullscreen = 0
 # INTERNET wird fuer die Gemini-Anfragen gebraucht.
 android.permissions = INTERNET
 
+# Noetig, damit TextToSpeech ("Antworten laut vorlesen", siehe
+# kern/sprache.py) und die Diktier-Funktion auf Android 11+ ueberhaupt einen
+# passenden Systemdienst finden (package-visibility-Einschraenkung seit
+# Android 11/API 30) - siehe android_manifest_extra.xml fuer die genaue
+# Begruendung.
+android.extra_manifest_xml = %(source.dir)s/android_manifest_extra.xml
+
 # Ohne das hier zielt Buildozer auf eine veraltete Android-Version - genau das
 # hat Google Play Protect als "unsichere App" blockiert ("fuer eine aeltere
 # Android-Version entwickelt, bietet keinen aktuellen Datenschutz"). Google
