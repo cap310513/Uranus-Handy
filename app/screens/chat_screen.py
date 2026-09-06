@@ -23,7 +23,7 @@ from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.textfield import MDTextField, MDTextFieldHintText
 
-from kern import gemini_verbindung, live_daten, speicher
+from kern import gemini_verbindung, live_daten, speicher, sprache
 
 
 def _daten_zu_satz(daten):
@@ -47,6 +47,12 @@ def _markdown_zu_kivy(text):
     sicher = re.sub(r"\*\*(.+?)\*\*", r"[b]\1[/b]", sicher)
     sicher = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"[i]\1[/i]", sicher)
     return sicher
+
+
+def _zum_vorlesen(text):
+    """Entfernt Markdown-Sternchen, bevor der Text an die Sprachausgabe geht -
+    sonst wuerde die Stimme "Stern Stern" mitlesen."""
+    return re.sub(r"\*+", "", text)
 
 
 class ChatScreen(MDScreen):
@@ -75,9 +81,12 @@ class ChatScreen(MDScreen):
             mode="filled", multiline=False,
         )
         self._eingabe.bind(on_text_validate=lambda *_: self._senden())
+        mikrofon_knopf = MDIconButton(icon="microphone")
+        mikrofon_knopf.bind(on_release=lambda *_: self._diktieren())
         sende_knopf = MDIconButton(icon="send")
         sende_knopf.bind(on_release=lambda *_: self._senden())
         zeile.add_widget(self._eingabe)
+        zeile.add_widget(mikrofon_knopf)
         zeile.add_widget(sende_knopf)
         wurzel.add_widget(zeile)
 
@@ -126,6 +135,18 @@ class ChatScreen(MDScreen):
         self._verlauf_liste.add_widget(zeile)
         self._scroll.scroll_y = 0
 
+    def _diktieren(self):
+        """Startet Androids Diktier-Dialog - auf dem PC kommt sofort eine
+        Fehlermeldung im Chat zurueck, da es dort keine Spracherkennung gibt."""
+
+        def erfolg(text):
+            Clock.schedule_once(lambda dt: setattr(self._eingabe, "text", text))
+
+        def fehler(meldung):
+            Clock.schedule_once(lambda dt: self._anzeigen("model", meldung))
+
+        sprache.diktieren(erfolg, fehler)
+
     def _senden(self):
         text = self._eingabe.text.strip()
         if not text or self._sendet_gerade:
@@ -166,6 +187,7 @@ class ChatScreen(MDScreen):
             return
         self._anzeigen("model", antwort)
         self._merken("model", antwort)
+        sprache.vorlesen(_zum_vorlesen(antwort))
 
     def _merken(self, rolle, text):
         verlauf = speicher.lade_verlauf()

@@ -18,7 +18,7 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.screen import MDScreen
 
-from kern import live_daten
+from kern import live_daten, sprache
 
 # (Anzeigename, Abrufbare Funktion) - in dieser Reihenfolge dargestellt.
 _QUELLEN = (
@@ -72,6 +72,9 @@ class _DatenKarte(MDCard):
         kopf = daten.get("wert", "")
         self._inhalt.text = "\n".join(([kopf] if kopf else []) + zeilen) or "Keine Daten."
 
+    def text_zum_vorlesen(self):
+        return f"{self._titel.text}: {self._inhalt.text}".replace("\n", ". ")
+
 
 class BriefingScreen(MDScreen):
     def __init__(self, **kwargs):
@@ -90,6 +93,9 @@ class BriefingScreen(MDScreen):
             text="Daily Briefing", font_style="Headline", role="small",
             adaptive_height=True,
         ))
+        vorlesen_knopf = MDIconButton(icon="volume-high")
+        vorlesen_knopf.bind(on_release=lambda *_: self._vorlesen())
+        kopfzeile.add_widget(vorlesen_knopf)
         aktualisieren_knopf = MDIconButton(icon="refresh")
         aktualisieren_knopf.bind(on_release=lambda *_: self.aktualisieren())
         kopfzeile.add_widget(aktualisieren_knopf)
@@ -113,6 +119,10 @@ class BriefingScreen(MDScreen):
         # Reiter, der beim App-Start schon aktiv ist - deshalb hier zusaetzlich
         # einmal direkt beim Bauen anstossen.
         Clock.schedule_once(lambda dt: self.aktualisieren(), 0.3)
+
+    def _vorlesen(self):
+        text = " ".join(karte.text_zum_vorlesen() for karte in self._karten)
+        sprache.vorlesen(text)
 
     def on_enter(self):
         """Wird von Kivy automatisch aufgerufen, sobald dieser Reiter aktiv wird."""

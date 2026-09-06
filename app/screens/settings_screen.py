@@ -17,7 +17,7 @@ from kivymd.uix.screen import MDScreen
 from kivymd.uix.selectioncontrol import MDSwitch
 from kivymd.uix.textfield import MDTextField, MDTextFieldHintText
 
-from kern import gemini_verbindung
+from kern import gemini_verbindung, sprache
 
 # (Anzeigename, Vorschau-Farbe) - die Vorschau ist nur zur Auswahl, KivyMD
 # waehlt selbst den passenden vollen Farbsatz zu jedem Palettennamen.
@@ -89,6 +89,31 @@ class SettingsScreen(MDScreen):
         design_karte.add_widget(hell_dunkel_reihe)
         liste.add_widget(design_karte)
 
+        # ---- Sprache ----
+        sprache_karte = MDCard(
+            style="elevated", orientation="vertical", padding="14dp",
+            spacing="10dp", size_hint_y=None, height="120dp",
+        )
+        sprache_karte.add_widget(MDLabel(
+            text="Sprache", font_style="Title", role="medium",
+            adaptive_height=True,
+        ))
+        vorlesen_reihe = MDBoxLayout(
+            orientation="horizontal", size_hint_y=None, height="48dp",
+        )
+        vorlesen_reihe.add_widget(MDLabel(
+            text="Antworten laut vorlesen", adaptive_height=True,
+        ))
+        # Gleiches Muster wie beim Hell/Dunkel-Schalter oben: "active" erst
+        # NACH dem Konstruktor setzen, sonst stuerzt es ab (ids.thumb fehlt
+        # noch).
+        vorlesen_schalter = MDSwitch()
+        vorlesen_schalter.active = sprache.ist_vorlesen_an()
+        vorlesen_schalter.bind(active=self._vorlesen_umschalten)
+        vorlesen_reihe.add_widget(vorlesen_schalter)
+        sprache_karte.add_widget(vorlesen_reihe)
+        liste.add_widget(sprache_karte)
+
         # ---- API-Schluessel ----
         key_karte = MDCard(
             style="elevated", orientation="vertical", padding="14dp",
@@ -124,6 +149,9 @@ class SettingsScreen(MDScreen):
 
     def _hell_dunkel_umschalten(self, _schalter, aktiv):
         MDApp.get_running_app().theme_cls.theme_style = "Dark" if aktiv else "Light"
+
+    def _vorlesen_umschalten(self, _schalter, aktiv):
+        sprache.vorlesen_umschalten(aktiv)
 
     def _key_speichern(self):
         try:
