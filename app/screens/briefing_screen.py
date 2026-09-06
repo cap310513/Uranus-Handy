@@ -8,9 +8,12 @@ Karten. Jede Karte holt ihre Daten in einem Hintergrund-Thread (siehe
 chat_screen.py fuer denselben Clock.schedule_once()-Grundsatz) und aktualisiert
 sich jedes Mal, wenn der Reiter geoeffnet wird.
 """
+import math
 import threading
 
 from kivy.clock import Clock
+from kivy.graphics import Color, Ellipse, Line
+from kivy.uix.widget import Widget
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDIconButton
@@ -113,6 +116,86 @@ class _DatenKarte(MDCard):
         return f"{self._titel.text}: {self._inhalt.text}".replace("\n", ". ").replace("◈", "")
 
 
+class _LageRadar(Widget):
+    """
+    Kleine, ruhig pulsierende Radar-Grafik - angelehnt an die "Lage"-Spalte
+    der PC-Version (dort kreisen die Kacheln als Punkte um die Mitte). Rein
+    dekorativ, ohne echtes 3D (bewusst nicht auf dem Handy - siehe
+    uranus-mobile-5-regeln); die tatsaechlichen Werte stehen in der
+    Rangliste direkt darunter.
+    """
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", "110dp")
+        super().__init__(**kwargs)
+        theme = MDApp.get_running_app().theme_cls
+        self._takt = 0.0
+        self._mitte = (0, 0)
+        self._radius_basis = 0
+        with self.canvas:
+            Color(*theme.primaryColor[:3], 0.35)
+            self._ring_aussen = Line(width=1.1)
+            self._ring_innen = Line(width=1.1)
+            Color(*theme.primaryColor[:3], 0.9)
+            self._punkte = [Ellipse(size=(9, 9)) for _ in range(3)]
+        self.bind(pos=self._neu_zeichnen, size=self._neu_zeichnen)
+        Clock.schedule_interval(self._puls, 1 / 20)
+
+    def _neu_zeichnen(self, *_args):
+        cx, cy = self.center
+        r_aussen = max(min(self.width, self.height) / 2 - 4, 1)
+        self._ring_aussen.circle = (cx, cy, r_aussen)
+        self._ring_innen.circle = (cx, cy, r_aussen * 0.55)
+        self._radius_basis = r_aussen * 0.78
+        self._mitte = (cx, cy)
+        self._positionieren()
+
+    def _positionieren(self):
+        cx, cy = self._mitte
+        for i, punkt in enumerate(self._punkte):
+            winkel = math.radians(90 + i * 120)
+            r = self._radius_basis + math.sin(self._takt + i) * 4
+            x = cx + math.cos(winkel) * r
+            y = cy + math.sin(winkel) * r
+            punkt.pos = (x - 4.5, y - 4.5)
+
+    def _puls(self, dt):
+        self._takt += dt * 2
+        self._positionieren()
+
+
+class _Rangliste(MDBoxLayout):
+    """Rangliste mit Balken - wie die Prioritaetenliste der PC-'Lage'-Spalte,
+    absteigend nach der jeweiligen Prozentkennzahl der Quelle sortiert."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("orientation", "vertical")
+        kwargs.setdefault("spacing", "6dp")
+        kwargs.setdefault("size_hint_y", None)
+        super().__init__(**kwargs)
+
+    def aktualisieren(self, eintraege):
+        self.clear_widgets()
+        theme = MDApp.get_running_app().theme_cls
+        sortiert = sorted(eintraege, key=lambda e: e[1], reverse=True)
+        for rang, (name, prozent) in enumerate(sortiert, start=1):
+            zeile = MDBoxLayout(orientation="vertical", size_hint_y=None,
+                                height="32dp", spacing="2dp")
+            zeile.add_widget(MDLabel(
+                text=f"{rang}. {name}", font_style="Label", role="small",
+                adaptive_height=True, theme_text_color="Secondary",
+            ))
+            balken = MDLinearProgressIndicator(
+                size_hint_y=None, height="5dp", radius=[2, 2, 2, 2],
+                value=prozent, indicator_color=theme.primaryColor,
+                track_color=_HUD_SPUR,
+            )
+            zeile.add_widget(balken)
+            self.add_widget(zeile)
+        self.height = len(sortiert) * 38 - 6 if sortiert else 0
+
+
 class BriefingScreen(MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -143,6 +226,29 @@ class BriefingScreen(MDScreen):
             orientation="vertical", spacing="12dp", padding="16dp",
             size_hint_y=None, adaptive_height=True,
         )
+
+        # "Lage"-Zusammenfassung (Radar + Rangliste) - rein additiv oben
+        # drauf, die drei bestehenden Karten darunter bleiben unveraendert.
+        # adaptive_height NICHT im Konstruktor (siehe _DatenKarte weiter
+        # oben) - erst Kinder hinzufuegen, dann setzen.
+        lage_karte = MDCard(
+            style="outlined", orientation="vertical", padding="14dp",
+            spacing="8dp", size_hint_y=None, height="100dp",
+            theme_bg_color="Custom", md_bg_color=_HUD_HINTERGRUND,
+        )
+        theme = MDApp.get_running_app().theme_cls
+        lage_karte.line_color = theme.primaryColor
+        lage_karte.add_widget(MDLabel(
+            text="◈ Lage", font_style="Title", role="medium",
+            adaptive_height=True, theme_text_color="Custom",
+            text_color=theme.primaryColor,
+        ))
+        lage_karte.add_widget(_LageRadar())
+        self._rangliste = _Rangliste()
+        lage_karte.add_widget(self._rangliste)
+        lage_karte.adaptive_height = True
+        liste.add_widget(lage_karte)
+
         for anzeigename, _funktion in _QUELLEN:
             karte = _DatenKarte(anzeigename)
             self._karten.append(karte)
@@ -185,4 +291,8 @@ class BriefingScreen(MDScreen):
     def _fertig(self, ergebnisse):
         for karte, daten in ergebnisse:
             karte.zeige(daten)
+        self._rangliste.aktualisieren([
+            (karte.anzeigename, daten.get("prozent", 0))
+            for karte, daten in ergebnisse if daten.get("ok")
+        ])
         self._laedt_gerade = False

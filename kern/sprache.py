@@ -115,11 +115,22 @@ def diktieren(erfolg_callback, fehler_callback=None):
 # ----------------------------------------------------------------------
 # Vorlesen (Sprachausgabe)
 # ----------------------------------------------------------------------
+_TTS_WIRD_ERSTELLT = False
+_TTS_FEHLGESCHLAGEN = False
 
-def _hole_tts_motor():
-    global _TTS_MOTOR
-    if _TTS_MOTOR is not None or not ist_android():
-        return _TTS_MOTOR
+
+def _tts_erstellen():
+    """
+    Baut den TextToSpeech-Motor - MUSS auf Androids Haupt-/UI-Thread laufen,
+    sonst verweigert Android das mit "Can't create handler inside thread that
+    has not called Looper.prepare()" (TextToSpeech braucht intern einen
+    Handler/Looper fuer seinen Init-Rueckruf). Kivys eigener Python-Thread ist
+    auf Android NICHT der UI-Thread - deshalb @run_on_ui_thread statt eines
+    normalen Funktionsaufrufs. Live auf dem Geraet getestet: ohne das hier
+    blieb "Vorlesen" wirkungslos, ohne dass ueberhaupt ein Fehler auftauchte
+    (der Motor wurde nie fertig, jeder speak()-Aufruf lief ins Leere).
+    """
+    global _TTS_MOTOR, _TTS_FEHLGESCHLAGEN
     try:
         from jnius import PythonJavaClass, autoclass, java_method
 
@@ -139,26 +150,37 @@ def _hole_tts_motor():
         # weg und Android verliert die Rueckruf-Verbindung.
         global _INIT_HOERER
         _INIT_HOERER = _InitHoerer()
-        _TTS_MOTOR = TextToSpeech(PythonActivity.mActivity, _INIT_HOERER)
-        _TTS_MOTOR.setLanguage(Locale.GERMANY)
+        motor = TextToSpeech(PythonActivity.mActivity, _INIT_HOERER)
+        motor.setLanguage(Locale.GERMANY)
+        _TTS_MOTOR = motor
     except Exception as exc:
         print(f"[Sprache] TextToSpeech konnte nicht gestartet werden: {exc}")
-        _TTS_MOTOR = None
-    return _TTS_MOTOR
+        _TTS_FEHLGESCHLAGEN = True
 
 
-def vorlesen(text):
+def vorlesen(text, _versuch=0):
     """Liest den Text laut vor, wenn Vorlesen eingeschaltet ist. Tut auf dem
     PC und bei ausgeschaltetem Vorlesen bewusst nichts."""
-    if not text or not ist_android() or not ist_vorlesen_an():
+    global _TTS_WIRD_ERSTELLT
+    if not text or not ist_android() or not ist_vorlesen_an() or _TTS_FEHLGESCHLAGEN:
         return
     try:
-        from jnius import autoclass
-        motor = _hole_tts_motor()
-        if motor is None:
+        if _TTS_MOTOR is None:
+            if not _TTS_WIRD_ERSTELLT:
+                _TTS_WIRD_ERSTELLT = True
+                from android.runnable import run_on_ui_thread
+                run_on_ui_thread(_tts_erstellen)()
+            # Der Motor braucht (asynchron, auf dem UI-Thread) einen kurzen
+            # Moment zum Starten - statt den allerersten Vorlesen-Aufruf
+            # stumm zu verschlucken, bis zu 2 Sekunden lang erneut versuchen.
+            if _versuch < 4:
+                from kivy.clock import Clock
+                Clock.schedule_once(
+                    lambda dt: vorlesen(text, _versuch + 1), 0.5)
             return
+        from jnius import autoclass
         TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
-        motor.speak(text, TextToSpeech.QUEUE_FLUSH, None, None)
+        _TTS_MOTOR.speak(text, TextToSpeech.QUEUE_FLUSH, None, None)
     except Exception as exc:
         print(f"[Sprache] Vorlesen fehlgeschlagen: {exc}")
 

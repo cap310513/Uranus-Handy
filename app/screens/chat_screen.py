@@ -9,10 +9,13 @@ Prinzip wie self.after() bei tkinter in der PC-Version: UI-Aenderungen aus
 einem Hintergrund-Thread muessen ueber den Haupt-Thread laufen, sonst droht ein
 Absturz.
 """
+import random
 import re
 import threading
 
 from kivy.clock import Clock
+from kivy.graphics import Color, Point
+from kivy.uix.widget import Widget
 from kivy.utils import escape_markup
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
@@ -24,6 +27,52 @@ from kivymd.uix.screen import MDScreen
 from kivymd.uix.textfield import MDTextField, MDTextFieldHintText
 
 from kern import gemini_verbindung, live_daten, speicher, sprache
+
+
+class _Sternenfeld(Widget):
+    """
+    Ruhig treibender Punktschwarm hinter dem Chatverlauf, angelehnt an das
+    Partikelfeld im Chatbot-Reiter der PC-Version - bewusst als einfache
+    Kivy-Grafik statt echtem 3D (siehe uranus-mobile-5-regeln: kein echtes
+    3D auf dem Handy). Liegt als erstes Kind unter dem eigentlichen Inhalt,
+    scheint also nur durch die Luecken zwischen den Sprechblasen durch.
+    """
+    _ANZAHL = 50
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        theme = MDApp.get_running_app().theme_cls
+        self._punkte = []
+        with self.canvas:
+            Color(*theme.primaryColor[:3], 0.4)
+            self._zeichnung = Point(pointsize=1.4)
+        self.bind(pos=self._neu_verteilen, size=self._neu_verteilen)
+        Clock.schedule_interval(self._takt, 1 / 12)
+
+    def _neu_verteilen(self, *_args):
+        if self.width <= 0 or self.height <= 0:
+            return
+        self._punkte = [
+            [random.uniform(self.x, self.right),
+             random.uniform(self.y, self.top),
+             random.uniform(-5, 5), random.uniform(-5, 5)]
+            for _ in range(self._ANZAHL)
+        ]
+
+    def _takt(self, dt):
+        if not self._punkte:
+            self._neu_verteilen()
+            return
+        flach = []
+        for punkt in self._punkte:
+            punkt[0] += punkt[2] * dt
+            punkt[1] += punkt[3] * dt
+            if punkt[0] < self.x or punkt[0] > self.right:
+                punkt[2] *= -1
+            if punkt[1] < self.y or punkt[1] > self.top:
+                punkt[3] *= -1
+            flach.extend([punkt[0], punkt[1]])
+        self._zeichnung.points = flach
 
 
 def _daten_zu_satz(daten):
@@ -90,6 +139,7 @@ class ChatScreen(MDScreen):
         zeile.add_widget(sende_knopf)
         wurzel.add_widget(zeile)
 
+        self.add_widget(_Sternenfeld())
         self.add_widget(wurzel)
 
         for nachricht in speicher.lade_verlauf():

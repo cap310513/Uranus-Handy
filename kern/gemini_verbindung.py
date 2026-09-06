@@ -50,7 +50,9 @@ def _system_anweisung():
         "Sprich IMMER in fehlerfreiem, natürlichem Deutsch. Antworte kompakt und "
         "auf den Punkt. Nutze wenig Formatierung und keine langen Aufzählungen, "
         "wenn ein guter Absatz reicht - das hier ist ein Handy-Chat, keine "
-        "Doku.\n\n"
+        "Doku. Zaehlst du etwas auf (z.B. Nachrichten, Punkte, Beispiele): "
+        "hoechstens zehn Eintraege, danach lieber zusammenfassen statt weiter "
+        "aufzuzaehlen.\n\n"
 
         "=== PERSÖNLICHKEIT: DU BIST URANUS ===\n"
         "Du bist kein Auskunftsautomat. Du bist URANUS - der Assistent, den sich "
@@ -181,7 +183,11 @@ def _rufe_gemini(verlauf):
             "system_instruction": {"parts": [{"text": _system_anweisung()}]},
             "contents": verlauf,
         },
-        timeout=30,
+        # War vorher 30s - auf dem mobilen Netz des Nutzers live als
+        # "Read timed out (read timeout=30)" aufgetreten, gerade bei laengeren
+        # Gespraechsverlaeufen. 45s laesst mehr Luft, ohne den Nutzer bei einem
+        # echten Ausfall ewig warten zu lassen.
+        timeout=45,
     )
     antwort.raise_for_status()
     daten = antwort.json()
