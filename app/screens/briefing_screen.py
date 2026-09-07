@@ -143,9 +143,15 @@ class _DatenKarte(MDCard):
         # adaptive_height danach setzen - so passt sich die Karte spaeter
         # wirklich der tatsaechlichen Zeilenzahl an (z.B. 4 Nachrichten
         # brauchen mehr Platz als eine kurze Wetterzeile).
+        #
+        # padding unten bewusst groesser als an den anderen drei Seiten -
+        # zusaetzliche Sicherheitsmarge, weil mehrzeiliger Inhalt (z.B. bei
+        # Kryptowaehrungen: Kopfzeile + bis zu 3 Zeilen) live beobachtet
+        # knapp am unteren Rand abgeschnitten wurde.
         theme = MDApp.get_running_app().theme_cls
         super().__init__(
-            style="outlined", padding="14dp", spacing="8dp",
+            style="elevated", padding=("14dp", "14dp", "14dp", "20dp"),
+            spacing="8dp",
             orientation="vertical", size_hint_y=None, height="150dp",
             theme_bg_color="Custom", md_bg_color=hud_optik.hintergrund(theme),
             **kwargs,
@@ -195,9 +201,21 @@ class _DatenKarte(MDCard):
         balken_zeile.add_widget(self._balken)
         self.add_widget(balken_zeile)
 
-        # Mini-Chat - siehe Klassen-Docstring.
+        # Abstandshalter vor dem Mini-Chat - zusaetzlich zum normalen
+        # spacing="8dp" der Karte, damit die Eingabezeile sichtbar von der
+        # Karte darueber getrennt ist (live als "ragt hinein" gemeldet).
+        self.add_widget(Widget(size_hint_y=None, height="6dp"))
+
+        # Mini-Chat - siehe Klassen-Docstring. adaptive_height statt einer
+        # geratenen festen Zeilenhoehe: MDTextField hat selbst eine feste
+        # Eigenhoehe von 56dp (Material-3-Vorgabe fuer ein einzeiliges
+        # Feld) - eine kleinere feste Zeilenhoehe (z.B. "40dp") zwingt das
+        # Feld NICHT kleiner, es ragt dann einfach ueber den Rand seiner
+        # eigenen Zeile hinaus in die Karte darueber hinein (genau der
+        # gemeldete Fehler). adaptive_height richtet sich stattdessen nach
+        # der tatsaechlich groessten Kindhoehe.
         mini_chat_zeile = MDBoxLayout(
-            orientation="horizontal", size_hint_y=None, height="40dp",
+            orientation="horizontal", size_hint_y=None, adaptive_height=True,
             spacing="6dp",
         )
         self._mini_chat_feld = MDTextField(
@@ -206,13 +224,14 @@ class _DatenKarte(MDCard):
         )
         self._mini_chat_feld.bind(
             on_text_validate=lambda *_: self._mini_chat_senden())
-        mini_chat_knopf = MDIconButton(icon="send")
+        mini_chat_knopf = MDIconButton(icon="send", ripple_canvas_after=False)
         mini_chat_knopf.bind(on_release=lambda *_: self._mini_chat_senden())
         mini_chat_zeile.add_widget(self._mini_chat_feld)
         mini_chat_zeile.add_widget(mini_chat_knopf)
         self.add_widget(mini_chat_zeile)
 
         self.adaptive_height = True
+        hud_optik.glow_anwenden(self, theme)
 
     def zeige(self, daten):
         if not daten.get("ok"):
@@ -242,6 +261,7 @@ class _DatenKarte(MDCard):
         self._titel.text_color = theme.primaryColor
         self._balken.indicator_color = theme.primaryColor
         self._balken.track_color = hud_optik.spur(theme)
+        hud_optik.glow_anwenden(self, theme)
 
     def _mini_chat_senden(self):
         text = self._mini_chat_feld.text.strip()
@@ -281,8 +301,8 @@ class _LageRadar(Widget):
     """
 
     def __init__(self, **kwargs):
-        kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", "110dp")
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", ("92dp", "92dp"))
         super().__init__(**kwargs)
         theme = MDApp.get_running_app().theme_cls
         self._winkel = 0.0
@@ -383,10 +403,10 @@ class BriefingScreen(MDScreen):
             text_color=theme.primaryColor,
         )
         kopfzeile.add_widget(self._kopf_label)
-        vorlesen_knopf = MDIconButton(icon="volume-high")
+        vorlesen_knopf = MDIconButton(icon="volume-high", ripple_canvas_after=False)
         vorlesen_knopf.bind(on_release=lambda *_: self._vorlesen())
         kopfzeile.add_widget(vorlesen_knopf)
-        aktualisieren_knopf = MDIconButton(icon="refresh")
+        aktualisieren_knopf = MDIconButton(icon="refresh", ripple_canvas_after=False)
         aktualisieren_knopf.bind(on_release=lambda *_: self.aktualisieren())
         kopfzeile.add_widget(aktualisieren_knopf)
         wurzel.add_widget(kopfzeile)
@@ -401,7 +421,7 @@ class BriefingScreen(MDScreen):
         # adaptive_height NICHT im Konstruktor (siehe _DatenKarte weiter
         # oben) - erst Kinder hinzufuegen, dann setzen.
         self._lage_karte = MDCard(
-            style="outlined", orientation="vertical", padding="14dp",
+            style="elevated", orientation="vertical", padding="14dp",
             spacing="8dp", size_hint_y=None, height="100dp",
             theme_bg_color="Custom", md_bg_color=hud_optik.hintergrund(theme),
         )
@@ -412,11 +432,23 @@ class BriefingScreen(MDScreen):
             text_color=theme.primaryColor,
         )
         self._lage_karte.add_widget(self._lage_titel)
+        # Radar und Rangliste NEBENEINANDER statt gestapelt: das runde Radar
+        # ueberschnitt sich als eigene, dekorative Grafik direkt UEBER der
+        # Rangliste live sichtbar mit deren Text und Balken. Nebeneinander
+        # (Radar in fester, kleiner Groesse rechts, Rangliste nimmt den Rest
+        # der Breite links) ist Ueberlappung durch die Anordnung selbst
+        # ausgeschlossen, statt sie nur ueber Transparenz zu kaschieren.
+        lage_reihe = MDBoxLayout(
+            orientation="horizontal", spacing="12dp",
+            size_hint_y=None, adaptive_height=True,
+        )
+        self._rangliste = _Rangliste(size_hint_x=1)
+        lage_reihe.add_widget(self._rangliste)
         self._radar = _LageRadar()
-        self._lage_karte.add_widget(self._radar)
-        self._rangliste = _Rangliste()
-        self._lage_karte.add_widget(self._rangliste)
+        lage_reihe.add_widget(self._radar)
+        self._lage_karte.add_widget(lage_reihe)
         self._lage_karte.adaptive_height = True
+        hud_optik.glow_anwenden(self._lage_karte, theme)
         liste.add_widget(self._lage_karte)
 
         for anzeigename, anfangsfunktion, mini_chat_funktion in _QUELLEN:
@@ -476,6 +508,7 @@ class BriefingScreen(MDScreen):
         self._lage_karte.md_bg_color = hud_optik.hintergrund(theme)
         self._lage_karte.line_color = theme.primaryColor
         self._lage_titel.text_color = theme.primaryColor
+        hud_optik.glow_anwenden(self._lage_karte, theme)
         self._radar.aktualisiere_theme()
         self._rangliste.aktualisieren(self._letzte_rangliste)
         for karte in self._karten:

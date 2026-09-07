@@ -7,6 +7,7 @@ bauen - er landet in kern.gemini_verbindung.speichere_api_key(), das ihn im
 schreibbaren App-Datenordner ablegt (siehe dort, gleiches Prinzip wie
 kern/speicher.py fuer den Chatverlauf).
 """
+from kivy.uix.widget import Widget
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDButton, MDButtonText
@@ -33,10 +34,18 @@ _PALETTEN = (
 )
 
 
-def _hud_karte(hoehe, theme):
+def _hud_karte(theme):
+    # adaptive_height NICHT im Konstruktor setzen (MDCard-FBO-Absturz bei
+    # noch kindloser Karte, siehe briefing_screen.py) - erst Kinder
+    # hinzufuegen, dann adaptive_height setzen (siehe SettingsScreen.__init__
+    # weiter unten). Vorher stand hier eine feste Hoehe ("190dp"/"120dp"),
+    # die fuer Titel + Textfeld (56dp fest) + Knopf (40dp fest) + Statuszeile
+    # tatsaechlich zu knapp bemessen war - dadurch ragte z.B. der
+    # "Speichern"-Knopf teils aus der Karte heraus und wurde vom Textfeld
+    # darueber halb verdeckt (live gemeldet).
     return MDCard(
-        style="outlined", orientation="vertical", padding="14dp",
-        spacing="10dp", size_hint_y=None, height=hoehe,
+        style="elevated", orientation="vertical", padding="14dp",
+        spacing="10dp", size_hint_y=None, height="10dp",
         theme_bg_color="Custom", md_bg_color=hud_optik.hintergrund(theme),
     )
 
@@ -70,7 +79,7 @@ class SettingsScreen(MDScreen):
         )
 
         # ---- Design ----
-        self._design_karte = _hud_karte("190dp", theme)
+        self._design_karte = _hud_karte(theme)
         self._design_karte.line_color = theme.primaryColor
         self._design_titel = _hud_titel("Design", theme)
         self._design_karte.add_widget(self._design_titel)
@@ -82,7 +91,7 @@ class SettingsScreen(MDScreen):
         for name, hexfarbe in _PALETTEN:
             knopf = MDButton(style="tonal", size_hint=(None, None),
                              size=("40dp", "40dp"), radius=[20, 20, 20, 20],
-                             theme_bg_color="Custom")
+                             theme_bg_color="Custom", ripple_canvas_after=False)
             knopf.md_bg_color = _hex_zu_rgba(hexfarbe)
             knopf.bind(on_release=lambda _w, n=name: self._farbe_waehlen(n))
             farbreihe.add_widget(knopf)
@@ -103,10 +112,12 @@ class SettingsScreen(MDScreen):
         schalter.bind(active=self._hell_dunkel_umschalten)
         hell_dunkel_reihe.add_widget(schalter)
         self._design_karte.add_widget(hell_dunkel_reihe)
+        self._design_karte.adaptive_height = True
+        hud_optik.glow_anwenden(self._design_karte, theme)
         liste.add_widget(self._design_karte)
 
         # ---- Sprache ----
-        self._sprache_karte = _hud_karte("120dp", theme)
+        self._sprache_karte = _hud_karte(theme)
         self._sprache_karte.line_color = theme.primaryColor
         self._sprache_titel = _hud_titel("Sprache", theme)
         self._sprache_karte.add_widget(self._sprache_titel)
@@ -124,10 +135,12 @@ class SettingsScreen(MDScreen):
         vorlesen_schalter.bind(active=self._vorlesen_umschalten)
         vorlesen_reihe.add_widget(vorlesen_schalter)
         self._sprache_karte.add_widget(vorlesen_reihe)
+        self._sprache_karte.adaptive_height = True
+        hud_optik.glow_anwenden(self._sprache_karte, theme)
         liste.add_widget(self._sprache_karte)
 
         # ---- API-Schluessel ----
-        self._key_karte = _hud_karte("190dp", theme)
+        self._key_karte = _hud_karte(theme)
         self._key_karte.line_color = theme.primaryColor
         self._key_titel = _hud_titel("Gemini-API-Key", theme)
         self._key_karte.add_widget(self._key_titel)
@@ -138,13 +151,21 @@ class SettingsScreen(MDScreen):
         )
         self._key_karte.add_widget(self._key_feld)
 
-        speichern_knopf = MDButton(style="filled")
+        # Eigener kleiner Abstandshalter vor dem Knopf - zusaetzlich zum
+        # normalen spacing="10dp" der Karte, damit "Speichern" sichtbar Luft
+        # zum Textfeld darueber hat (live als "verdeckt sich" gemeldet).
+        self._key_karte.add_widget(Widget(size_hint_y=None, height="6dp"))
+
+        speichern_knopf = MDButton(style="filled", ripple_canvas_after=False)
         speichern_knopf.add_widget(MDButtonText(text="Speichern"))
         speichern_knopf.bind(on_release=lambda *_: self._key_speichern())
+        hud_optik.volle_breite(speichern_knopf)
         self._key_karte.add_widget(speichern_knopf)
 
         self._key_status = MDLabel(text="", adaptive_height=True)
         self._key_karte.add_widget(self._key_status)
+        self._key_karte.adaptive_height = True
+        hud_optik.glow_anwenden(self._key_karte, theme)
         liste.add_widget(self._key_karte)
 
         scroll = MDScrollView()
@@ -183,6 +204,7 @@ class SettingsScreen(MDScreen):
             karte.md_bg_color = hg
             karte.line_color = theme.primaryColor
             titel.text_color = theme.primaryColor
+            hud_optik.glow_anwenden(karte, theme)
 
 
 def _hex_zu_rgba(hexfarbe):

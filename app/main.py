@@ -21,6 +21,7 @@ if platform not in ("android", "ios"):
     Config.set("graphics", "resizable", "0")
 
 from kivy.core.window import Window  # noqa: E402
+from kivy.uix.floatlayout import FloatLayout  # noqa: E402
 from kivymd.app import MDApp  # noqa: E402
 from kivymd.uix.boxlayout import MDBoxLayout  # noqa: E402
 from kivymd.uix.navigationbar import (  # noqa: E402
@@ -34,6 +35,7 @@ _PROJEKT_WURZEL = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _PROJEKT_WURZEL not in sys.path:
     sys.path.insert(0, _PROJEKT_WURZEL)
 
+from app import hud_optik  # noqa: E402
 from app.screens.briefing_screen import BriefingScreen  # noqa: E402
 from app.screens.chat_screen import ChatScreen  # noqa: E402
 from app.screens.login_screen import LoginScreen  # noqa: E402
@@ -81,8 +83,19 @@ class UranusMobileApp(MDApp):
         # einzelne Widgets (Textfelder etc. mit eigener KV-Bindung an die
         # Theme-Farben) hell wurden - live genau so gemeldet.
         self._rahmen = MDBoxLayout(orientation="vertical", theme_bg_color="Custom")
-        self._rahmen.md_bg_color = self.theme_cls.backgroundColor
-        self._rahmen.add_widget(self.root_manager)
+        self._rahmen.md_bg_color = hud_optik.hintergrund_getoent(self.theme_cls)
+        # BoxLayout reiht Kinder nur hintereinander - fuer das Tech-Raster als
+        # HINTERGRUND-Schicht (siehe unten) braucht es einen echten
+        # Ueberlagerungs-Container. Deshalb ein FloatLayout als einziges Kind
+        # von _rahmen: _rahmen selbst behaelt sein padding (fuer die
+        # Insets, siehe _insets_geaendert - FloatLayout ignoriert padding
+        # komplett), waehrend die Schicht darin Raster + Bildschirme
+        # uebereinanderlegt.
+        self._schicht = FloatLayout()
+        self._raster = hud_optik.TechRaster(size_hint=(1, 1))
+        self._schicht.add_widget(self._raster)
+        self._schicht.add_widget(self.root_manager)
+        self._rahmen.add_widget(self._schicht)
         system_raender.registriere(self._insets_geaendert)
         self.theme_cls.bind(theme_style=self._theme_geaendert,
                              primary_palette=self._theme_geaendert)
@@ -107,8 +120,12 @@ class UranusMobileApp(MDApp):
         settings_screen.py) - aktualisiert alles, was seine Farbe als festen
         Python-Wert statt als KV-Bindung gesetzt hat und deshalb nicht von
         selbst mitzieht."""
-        self._rahmen.md_bg_color = self.theme_cls.backgroundColor
+        self._rahmen.md_bg_color = hud_optik.hintergrund_getoent(self.theme_cls)
+        self._raster.aktualisiere_theme(self.theme_cls)
+        self.root_manager.get_screen("login").aktualisiere_theme()
+        self.root_manager.get_screen("welcome_back").aktualisiere_theme()
         self.screen_manager.get_screen("briefing").aktualisiere_theme()
+        self.screen_manager.get_screen("chat").aktualisiere_theme()
         self.screen_manager.get_screen("settings").aktualisiere_theme()
 
     def _baue_hauptbereich(self):

@@ -26,6 +26,7 @@ from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.textfield import MDTextField, MDTextFieldHintText
 
+from app import hud_optik
 from kern import gemini_verbindung, live_daten, speicher, sprache
 
 
@@ -56,6 +57,9 @@ class _Sternenfeld(Widget):
         Hintergrunds waehrend der Wartezeit auf die Antwort."""
         self._tempo = 2.4 if aktiv else 1.0
         self._farbe.a = 0.75 if aktiv else 0.4
+
+    def aktualisiere_theme(self, theme):
+        self._farbe.rgb = theme.primaryColor[:3]
 
     def _neu_verteilen(self, *_args):
         if self.width <= 0 or self.height <= 0:
@@ -139,9 +143,9 @@ class ChatScreen(MDScreen):
             mode="filled", multiline=False,
         )
         self._eingabe.bind(on_text_validate=lambda *_: self._senden())
-        mikrofon_knopf = MDIconButton(icon="microphone")
+        mikrofon_knopf = MDIconButton(icon="microphone", ripple_canvas_after=False)
         mikrofon_knopf.bind(on_release=lambda *_: self._diktieren())
-        sende_knopf = MDIconButton(icon="send")
+        sende_knopf = MDIconButton(icon="send", ripple_canvas_after=False)
         sende_knopf.bind(on_release=lambda *_: self._senden())
         zeile.add_widget(self._eingabe)
         zeile.add_widget(mikrofon_knopf)
@@ -197,6 +201,7 @@ class ChatScreen(MDScreen):
             )
             blase.add_widget(label)
             blase.adaptive_height = True
+            hud_optik.glow_anwenden(blase, theme, staerke=1, deckkraft=0.4)
             zeile.add_widget(blase)
         else:
             zeile = MDBoxLayout(
@@ -285,3 +290,10 @@ class ChatScreen(MDScreen):
         verlauf = speicher.lade_verlauf()
         verlauf.append({"rolle": rolle, "text": text})
         speicher.speichere_verlauf(verlauf)
+
+    def aktualisiere_theme(self):
+        """Wird von app/main.py (_theme_geaendert) nach jedem Hell/Dunkel-
+        oder Farbwechsel aufgerufen. Bereits angezeigte Nachrichten behalten
+        ihre Farbe von der Erstellung (siehe _anzeigen()); neue Nachrichten
+        verwenden ab sofort automatisch das aktuelle Theme."""
+        self._sternenfeld.aktualisiere_theme(MDApp.get_running_app().theme_cls)
