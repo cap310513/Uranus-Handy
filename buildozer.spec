@@ -27,13 +27,28 @@ version = 0.1
 # automatischen Versuchen) mit HTTP 502/504 ausgefallen. Deshalb eigene
 # Bauregel in p4a-recipes/freetype mit SourceForge als Quelle stattdessen
 # (siehe p4a.local_recipes unten).
-requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,pycairo,pillow,requests,python-dotenv
+requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,pycairo,pillow,requests,python-dotenv,pypdf,plyer
 
 orientation = portrait
 fullscreen = 0
 
 # INTERNET wird fuer die Gemini-Anfragen gebraucht.
+#
+# Fuer den Datei-Upload im Lernen-Reiter (plyer.filechooser, siehe
+# app/screens/lernen_screen.py) ist BEWUSST KEINE Speicher-Berechtigung
+# eingetragen: plyer nutzt auf aktuellem Android den systemeigenen
+# Dokumenten-Picker (Storage Access Framework) - der braucht keine
+# READ/WRITE_EXTERNAL_STORAGE-Berechtigung, die App bekommt nur befristeten
+# Zugriff auf genau die ausgewaehlte Datei. Sollte sich das auf einem echten
+# Geraet als noetig herausstellen: hier ergaenzen.
 android.permissions = INTERNET
+
+# Noetig, damit TextToSpeech ("Antworten laut vorlesen", siehe
+# kern/sprache.py) und die Diktier-Funktion auf Android 11+ ueberhaupt einen
+# passenden Systemdienst finden (package-visibility-Einschraenkung seit
+# Android 11/API 30) - siehe android_manifest_extra.xml fuer die genaue
+# Begruendung.
+android.extra_manifest_xml = %(source.dir)s/android_manifest_extra.xml
 
 # Ohne das hier zielt Buildozer auf eine veraltete Android-Version - genau das
 # hat Google Play Protect als "unsichere App" blockiert ("fuer eine aeltere

@@ -3,6 +3,7 @@
 Konto erstellen oder anmelden - Vorbild: LoginView aus der PC-Version
 (main.py), eigenstaendig neu gebaut (Regel 5).
 """
+from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDButton, MDButtonText
 from kivymd.uix.card import MDCard
@@ -10,6 +11,7 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.textfield import MDTextField, MDTextFieldHintText
 
+from app import hud_optik
 from kern import konten
 
 
@@ -19,12 +21,19 @@ class LoginScreen(MDScreen):
         self.name = "login"
         self._on_erfolg = on_erfolg
         self._modus = "registrieren"
+        theme = MDApp.get_running_app().theme_cls
 
         wurzel = MDBoxLayout(orientation="vertical", padding="24dp")
 
+        # adaptive_height NICHT im Konstruktor setzen (MDCard-FBO-Absturz bei
+        # noch kindloser Karte, siehe briefing_screen.py) - erst Kinder
+        # hinzufuegen, danach adaptive_height setzen. Vorher stand hier eine
+        # feste Hoehe ("360dp"), die fuer Titel + 3 Textfelder (je 56dp fest,
+        # siehe MDTextField) + Fehlertext + 2 Knoepfe tatsaechlich zu knapp
+        # bemessen war.
         self._karte = MDCard(
             style="elevated", orientation="vertical", padding="20dp",
-            spacing="12dp", size_hint=(1, None), height="360dp",
+            spacing="12dp", size_hint=(1, None), height="10dp",
             pos_hint={"center_y": 0.5},
         )
 
@@ -52,20 +61,26 @@ class LoginScreen(MDScreen):
         self._fehler = MDLabel(text="", adaptive_height=True)
         self._karte.add_widget(self._fehler)
 
-        absenden = MDButton(style="filled")
+        # ripple_canvas_after=False: siehe welcome_back_screen.py - haelt den
+        # Ripple-Kreis hinter dem Knopftext statt sichtbar darueber.
+        absenden = MDButton(style="filled", ripple_canvas_after=False)
         self._absenden_text = MDButtonText(text="Konto erstellen")
         absenden.add_widget(self._absenden_text)
         absenden.bind(on_release=lambda *_: self._absenden())
+        hud_optik.volle_breite(absenden)
         self._karte.add_widget(absenden)
 
-        umschalten = MDButton(style="text")
+        umschalten = MDButton(style="text", ripple_canvas_after=False)
         self._umschalten_text = MDButtonText(
             text="Schon ein Konto? Hier anmelden",
         )
         umschalten.add_widget(self._umschalten_text)
         umschalten.bind(on_release=lambda *_: self._modus_umschalten())
+        hud_optik.volle_breite(umschalten)
         self._karte.add_widget(umschalten)
 
+        self._karte.adaptive_height = True
+        hud_optik.glow_anwenden(self._karte, theme)
         wurzel.add_widget(self._karte)
         self.add_widget(wurzel)
 
@@ -115,3 +130,6 @@ class LoginScreen(MDScreen):
         self._wiederholung_feld.text = ""
         konten.sitzung_merken(meldung if self._modus == "anmelden" else name)
         self._on_erfolg(meldung if self._modus == "anmelden" else name)
+
+    def aktualisiere_theme(self):
+        hud_optik.glow_anwenden(self._karte, MDApp.get_running_app().theme_cls)

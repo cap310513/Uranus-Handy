@@ -26,6 +26,7 @@ from kivymd.uix.scrollview import MDScrollView
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.textfield import MDTextField, MDTextFieldHintText
 
+from app import hud_optik
 from kern import gemini_verbindung, live_daten, speicher, sprache
 
 
@@ -56,6 +57,9 @@ class _Sternenfeld(Widget):
         Hintergrunds waehrend der Wartezeit auf die Antwort."""
         self._tempo = 2.4 if aktiv else 1.0
         self._farbe.a = 0.75 if aktiv else 0.4
+
+    def aktualisiere_theme(self, theme):
+        self._farbe.rgb = theme.primaryColor[:3]
 
     def _neu_verteilen(self, *_args):
         if self.width <= 0 or self.height <= 0:
@@ -139,9 +143,9 @@ class ChatScreen(MDScreen):
             mode="filled", multiline=False,
         )
         self._eingabe.bind(on_text_validate=lambda *_: self._senden())
-        mikrofon_knopf = MDIconButton(icon="microphone")
+        mikrofon_knopf = MDIconButton(icon="microphone", ripple_canvas_after=False)
         mikrofon_knopf.bind(on_release=lambda *_: self._diktieren())
-        sende_knopf = MDIconButton(icon="send")
+        sende_knopf = MDIconButton(icon="send", ripple_canvas_after=False)
         sende_knopf.bind(on_release=lambda *_: self._senden())
         zeile.add_widget(self._eingabe)
         zeile.add_widget(mikrofon_knopf)
@@ -158,50 +162,63 @@ class ChatScreen(MDScreen):
 
     def _anzeigen(self, rolle, text, vorlaeufig=False):
         """
-        Baut eine Chat-Sprechblase - rechts fuer den Nutzer, links fuer
-        Uranus, per Farbe unterschieden. Bewusst NUR ein schmaler Rand statt
-        halber Bildschirmbreite (live als "zusammengequetscht" bemaengelt) -
-        die Blase darf fast die ganze Breite nutzen.
-        Gibt das Label zurueck, damit _senden() eine "denkt nach ..."-Blase
+        Nutzer-Nachrichten bleiben eine rechtsbuendige Sprechblase (klassisch
+        "gesendet"). Uranus' Antworten bekommen dagegen KEINE eigene Blase
+        mehr: der Text laeuft ueber die volle Bildschirmbreite und verschmilzt
+        farblich mit dem Hintergrund - Gemini-Optik statt Messenger-Look
+        (vorher war die Antwort in eine schmale Karte gequetscht, live so
+        bemaengelt).
+        Gibt das Label zurueck, damit _senden() eine "denkt nach ..."-Zeile
         spaeter mit der echten Antwort ueberschreiben kann, statt eine neue
-        Blase darunterzusetzen.
+        Zeile darunterzusetzen.
         """
         ist_nutzer = rolle == "user"
         theme = MDApp.get_running_app().theme_cls
 
-        zeile = MDBoxLayout(
-            orientation="horizontal", size_hint_y=None, adaptive_height=True,
-            padding=("28dp", "2dp", "6dp", "2dp") if ist_nutzer
-                    else ("6dp", "2dp", "28dp", "2dp"),
-        )
-        # Ein Fuellwidget links (Nutzer) bzw. rechts (Uranus) schiebt die
-        # Sprechblase an den passenden Bildschirmrand.
         if ist_nutzer:
-            zeile.add_widget(MDBoxLayout())
+            zeile = MDBoxLayout(
+                orientation="horizontal", size_hint_y=None, adaptive_height=True,
+                padding=("48dp", "4dp", "12dp", "4dp"),
+            )
+            zeile.add_widget(MDBoxLayout())  # schiebt die Blase nach rechts
 
-        # adaptive_height NICHT im Konstruktor von MDCard setzen: das stuerzt
-        # ab ("FBO Initialization failed"), weil MDCard dabei sofort einen
-        # Ripple/Schatten-Fbo mit der (noch kindlosen, also 0-hohen) Groesse
-        # anlegt - live getestet, exakt derselbe Fehler wie zuvor bei den
-        # Briefing-Karten. Deshalb: Konstruktor ohne adaptive_height, Kind
-        # zuerst hinzufuegen, adaptive_height danach setzen.
-        blase = MDCard(
-            style="elevated", padding="10dp", radius=[16, 16, 16, 16],
-            size_hint=(1, None), theme_bg_color="Custom",
-            md_bg_color=(theme.primaryContainerColor if ist_nutzer
-                        else theme.surfaceContainerHighColor),
-        )
-        label = MDLabel(
-            text=_markdown_zu_kivy(text), markup=True, adaptive_height=True,
-            theme_text_color="Secondary" if vorlaeufig else "Primary",
-            italic=vorlaeufig,
-        )
-        blase.add_widget(label)
-        blase.adaptive_height = True
-        zeile.add_widget(blase)
-
-        if not ist_nutzer:
-            zeile.add_widget(MDBoxLayout())
+            # adaptive_height NICHT im Konstruktor von MDCard setzen: das
+            # stuerzt ab ("FBO Initialization failed"), weil MDCard dabei
+            # sofort einen Ripple/Schatten-Fbo mit der (noch kindlosen, also
+            # 0-hohen) Groesse anlegt - live getestet, exakt derselbe Fehler
+            # wie zuvor bei den Briefing-Karten. Deshalb: Konstruktor ohne
+            # adaptive_height, Kind zuerst hinzufuegen, adaptive_height
+            # danach setzen.
+            blase = MDCard(
+                style="elevated", padding="10dp", radius=[16, 16, 16, 16],
+                size_hint=(1, None), theme_bg_color="Custom",
+                md_bg_color=theme.primaryContainerColor,
+            )
+            label = MDLabel(
+                text=_markdown_zu_kivy(text), markup=True, adaptive_height=True,
+                theme_text_color="Secondary" if vorlaeufig else "Primary",
+                italic=vorlaeufig,
+            )
+            blase.add_widget(label)
+            blase.adaptive_height = True
+            hud_optik.glow_anwenden(blase, theme, staerke=1, deckkraft=0.4)
+            zeile.add_widget(blase)
+        else:
+            zeile = MDBoxLayout(
+                orientation="vertical", size_hint_y=None, adaptive_height=True,
+                padding=("16dp", "6dp", "16dp", "6dp"),
+            )
+            label = MDLabel(
+                text=_markdown_zu_kivy(text), markup=True, adaptive_height=True,
+                theme_text_color="Secondary" if vorlaeufig else "Primary",
+                italic=vorlaeufig,
+            )
+            # Ohne text_size weiss ein Label nicht, bei welcher Breite es
+            # umbrechen soll (siehe briefing_screen.py fuer denselben, live
+            # gefundenen Fehler) - ohne eigene Karte, die das vorher indirekt
+            # erzwang, braucht die volle Antwort das jetzt explizit.
+            label.bind(width=lambda inst, w: setattr(inst, "text_size", (w, None)))
+            zeile.add_widget(label)
 
         self._verlauf_liste.add_widget(zeile)
         self._scroll.scroll_y = 0
@@ -273,3 +290,10 @@ class ChatScreen(MDScreen):
         verlauf = speicher.lade_verlauf()
         verlauf.append({"rolle": rolle, "text": text})
         speicher.speichere_verlauf(verlauf)
+
+    def aktualisiere_theme(self):
+        """Wird von app/main.py (_theme_geaendert) nach jedem Hell/Dunkel-
+        oder Farbwechsel aufgerufen. Bereits angezeigte Nachrichten behalten
+        ihre Farbe von der Erstellung (siehe _anzeigen()); neue Nachrichten
+        verwenden ab sofort automatisch das aktuelle Theme."""
+        self._sternenfeld.aktualisiere_theme(MDApp.get_running_app().theme_cls)

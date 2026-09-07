@@ -67,6 +67,29 @@ def wetter(ort="Berlin", lat=52.52, lon=13.405):
         return _leer(f"Wetter {ort}", exc)
 
 
+def geokodiere(ort):
+    """
+    Wandelt einen Ortsnamen in (gefundener_name, breite, laenge) um - ueber
+    Open-Meteo's kostenlose Geocoding-Schnittstelle (derselbe Anbieter wie
+    beim Wetter oben, kein eigener API-Key noetig). None, wenn nichts
+    gefunden wurde. Fuer die Mini-Chats im Daily Briefing (siehe
+    briefing_screen.py): wetter() oben braucht Breiten-/Laengengrad, ein
+    Nutzer tippt aber einen Ortsnamen wie "Antalya".
+    """
+    try:
+        antwort = requests.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+            params={"name": ort, "count": 1, "language": "de"},
+            timeout=_TIMEOUT)
+        antwort.raise_for_status()
+        treffer = (antwort.json().get("results") or [None])[0]
+        if not treffer:
+            return None
+        return treffer["name"], treffer["latitude"], treffer["longitude"]
+    except Exception:
+        return None
+
+
 def krypto(muenzen=("bitcoin", "ethereum"), waehrung="eur"):
     """Aktuelle Kurse samt Tagesveraenderung."""
     try:

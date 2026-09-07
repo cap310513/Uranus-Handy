@@ -7,6 +7,7 @@ bauen - er landet in kern.gemini_verbindung.speichere_api_key(), das ihn im
 schreibbaren App-Datenordner ablegt (siehe dort, gleiches Prinzip wie
 kern/speicher.py fuer den Chatverlauf).
 """
+from kivy.uix.widget import Widget
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDButton, MDButtonText
@@ -17,6 +18,7 @@ from kivymd.uix.screen import MDScreen
 from kivymd.uix.selectioncontrol import MDSwitch
 from kivymd.uix.textfield import MDTextField, MDTextFieldHintText
 
+from app import hud_optik
 from kern import gemini_verbindung, sprache
 
 # (Anzeigename, Vorschau-Farbe) - die Vorschau ist nur zur Auswahl, KivyMD
@@ -31,17 +33,20 @@ _PALETTEN = (
     ("Green", "4caf50"), ("Orange", "ff9800"), ("Red", "f44336"),
 )
 
-# HUD-Optik wie im Daily Briefing (briefing_screen.py) - sehr dunkles Navy
-# statt KivyMDs neutralem Grau, dazu ein duenner, leuchtender Kartenrand in
-# der jeweils gewaehlten Akzentfarbe.
-_HUD_HINTERGRUND = (0.03, 0.05, 0.09, 1)
 
-
-def _hud_karte(hoehe):
+def _hud_karte(theme):
+    # adaptive_height NICHT im Konstruktor setzen (MDCard-FBO-Absturz bei
+    # noch kindloser Karte, siehe briefing_screen.py) - erst Kinder
+    # hinzufuegen, dann adaptive_height setzen (siehe SettingsScreen.__init__
+    # weiter unten). Vorher stand hier eine feste Hoehe ("190dp"/"120dp"),
+    # die fuer Titel + Textfeld (56dp fest) + Knopf (40dp fest) + Statuszeile
+    # tatsaechlich zu knapp bemessen war - dadurch ragte z.B. der
+    # "Speichern"-Knopf teils aus der Karte heraus und wurde vom Textfeld
+    # darueber halb verdeckt (live gemeldet).
     return MDCard(
-        style="outlined", orientation="vertical", padding="14dp",
-        spacing="10dp", size_hint_y=None, height=hoehe,
-        theme_bg_color="Custom", md_bg_color=_HUD_HINTERGRUND,
+        style="elevated", orientation="vertical", padding="14dp",
+        spacing="10dp", size_hint_y=None, height="10dp",
+        theme_bg_color="Custom", md_bg_color=hud_optik.hintergrund(theme),
     )
 
 
@@ -58,13 +63,15 @@ class SettingsScreen(MDScreen):
         super().__init__(**kwargs)
         self.name = "settings"
         app = MDApp.get_running_app()
+        theme = app.theme_cls
 
         wurzel = MDBoxLayout(orientation="vertical")
-        wurzel.add_widget(MDLabel(
+        self._headline = MDLabel(
             text="• Einstellungen", font_style="Headline", role="small",
             adaptive_height=True, padding=("16dp", "16dp", "16dp", "0dp"),
-            theme_text_color="Custom", text_color=app.theme_cls.primaryColor,
-        ))
+            theme_text_color="Custom", text_color=theme.primaryColor,
+        )
+        wurzel.add_widget(self._headline)
 
         liste = MDBoxLayout(
             orientation="vertical", spacing="16dp", padding="16dp",
@@ -72,9 +79,10 @@ class SettingsScreen(MDScreen):
         )
 
         # ---- Design ----
-        design_karte = _hud_karte("190dp")
-        design_karte.line_color = app.theme_cls.primaryColor
-        design_karte.add_widget(_hud_titel("Design", app.theme_cls))
+        self._design_karte = _hud_karte(theme)
+        self._design_karte.line_color = theme.primaryColor
+        self._design_titel = _hud_titel("Design", theme)
+        self._design_karte.add_widget(self._design_titel)
 
         farbreihe = MDBoxLayout(
             orientation="horizontal", spacing="10dp",
@@ -83,11 +91,11 @@ class SettingsScreen(MDScreen):
         for name, hexfarbe in _PALETTEN:
             knopf = MDButton(style="tonal", size_hint=(None, None),
                              size=("40dp", "40dp"), radius=[20, 20, 20, 20],
-                             theme_bg_color="Custom")
+                             theme_bg_color="Custom", ripple_canvas_after=False)
             knopf.md_bg_color = _hex_zu_rgba(hexfarbe)
             knopf.bind(on_release=lambda _w, n=name: self._farbe_waehlen(n))
             farbreihe.add_widget(knopf)
-        design_karte.add_widget(farbreihe)
+        self._design_karte.add_widget(farbreihe)
 
         hell_dunkel_reihe = MDBoxLayout(
             orientation="horizontal", size_hint_y=None, height="48dp",
@@ -100,16 +108,19 @@ class SettingsScreen(MDScreen):
         # stuerzt ab ("AttributeError: ... no attribute '__getattr__'") -
         # live getestet. Deshalb Konstruktor leer, Wert danach setzen.
         schalter = MDSwitch()
-        schalter.active = (app.theme_cls.theme_style == "Dark")
+        schalter.active = (theme.theme_style == "Dark")
         schalter.bind(active=self._hell_dunkel_umschalten)
         hell_dunkel_reihe.add_widget(schalter)
-        design_karte.add_widget(hell_dunkel_reihe)
-        liste.add_widget(design_karte)
+        self._design_karte.add_widget(hell_dunkel_reihe)
+        self._design_karte.adaptive_height = True
+        hud_optik.glow_anwenden(self._design_karte, theme)
+        liste.add_widget(self._design_karte)
 
         # ---- Sprache ----
-        sprache_karte = _hud_karte("120dp")
-        sprache_karte.line_color = app.theme_cls.primaryColor
-        sprache_karte.add_widget(_hud_titel("Sprache", app.theme_cls))
+        self._sprache_karte = _hud_karte(theme)
+        self._sprache_karte.line_color = theme.primaryColor
+        self._sprache_titel = _hud_titel("Sprache", theme)
+        self._sprache_karte.add_widget(self._sprache_titel)
         vorlesen_reihe = MDBoxLayout(
             orientation="horizontal", size_hint_y=None, height="48dp",
         )
@@ -123,28 +134,39 @@ class SettingsScreen(MDScreen):
         vorlesen_schalter.active = sprache.ist_vorlesen_an()
         vorlesen_schalter.bind(active=self._vorlesen_umschalten)
         vorlesen_reihe.add_widget(vorlesen_schalter)
-        sprache_karte.add_widget(vorlesen_reihe)
-        liste.add_widget(sprache_karte)
+        self._sprache_karte.add_widget(vorlesen_reihe)
+        self._sprache_karte.adaptive_height = True
+        hud_optik.glow_anwenden(self._sprache_karte, theme)
+        liste.add_widget(self._sprache_karte)
 
         # ---- API-Schluessel ----
-        key_karte = _hud_karte("190dp")
-        key_karte.line_color = app.theme_cls.primaryColor
-        key_karte.add_widget(_hud_titel("Gemini-API-Key", app.theme_cls))
+        self._key_karte = _hud_karte(theme)
+        self._key_karte.line_color = theme.primaryColor
+        self._key_titel = _hud_titel("Gemini-API-Key", theme)
+        self._key_karte.add_widget(self._key_titel)
         self._key_feld = MDTextField(
             MDTextFieldHintText(text="API-Key"),
             mode="filled", multiline=False,
             text=gemini_verbindung.hole_aktiven_schluessel(),
         )
-        key_karte.add_widget(self._key_feld)
+        self._key_karte.add_widget(self._key_feld)
 
-        speichern_knopf = MDButton(style="filled")
+        # Eigener kleiner Abstandshalter vor dem Knopf - zusaetzlich zum
+        # normalen spacing="10dp" der Karte, damit "Speichern" sichtbar Luft
+        # zum Textfeld darueber hat (live als "verdeckt sich" gemeldet).
+        self._key_karte.add_widget(Widget(size_hint_y=None, height="6dp"))
+
+        speichern_knopf = MDButton(style="filled", ripple_canvas_after=False)
         speichern_knopf.add_widget(MDButtonText(text="Speichern"))
         speichern_knopf.bind(on_release=lambda *_: self._key_speichern())
-        key_karte.add_widget(speichern_knopf)
+        hud_optik.volle_breite(speichern_knopf)
+        self._key_karte.add_widget(speichern_knopf)
 
         self._key_status = MDLabel(text="", adaptive_height=True)
-        key_karte.add_widget(self._key_status)
-        liste.add_widget(key_karte)
+        self._key_karte.add_widget(self._key_status)
+        self._key_karte.adaptive_height = True
+        hud_optik.glow_anwenden(self._key_karte, theme)
+        liste.add_widget(self._key_karte)
 
         scroll = MDScrollView()
         scroll.add_widget(liste)
@@ -166,6 +188,23 @@ class SettingsScreen(MDScreen):
             self._key_status.text = "Gespeichert."
         except Exception as exc:
             self._key_status.text = f"Konnte nicht gespeichert werden: {exc}"
+
+    def aktualisiere_theme(self):
+        """Wird von app/main.py (_theme_geaendert) nach jedem Hell/Dunkel-
+        oder Farbwechsel aufgerufen - faerbt alles neu ein, was oben als
+        fester Python-Wert gesetzt wurde und darum nicht von selbst mitzieht."""
+        theme = MDApp.get_running_app().theme_cls
+        hg = hud_optik.hintergrund(theme)
+        self._headline.text_color = theme.primaryColor
+        for karte, titel in (
+            (self._design_karte, self._design_titel),
+            (self._sprache_karte, self._sprache_titel),
+            (self._key_karte, self._key_titel),
+        ):
+            karte.md_bg_color = hg
+            karte.line_color = theme.primaryColor
+            titel.text_color = theme.primaryColor
+            hud_optik.glow_anwenden(karte, theme)
 
 
 def _hex_zu_rgba(hexfarbe):

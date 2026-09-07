@@ -118,6 +118,16 @@ def diktieren(erfolg_callback, fehler_callback=None):
 _TTS_WIRD_ERSTELLT = False
 _TTS_BEREIT = False
 _TTS_FEHLGESCHLAGEN = False
+_TTS_FEHLSCHLAEGE = 0
+# Ab wie vielen onInit(FEHLER)-Rueckrufen in Folge endgueltig aufgegeben wird.
+# EIN Fehlschlag reicht auf manchen Geraeten nicht als Beweis, dass der
+# Sprachdienst wirklich fehlt - der TTS-Systemdienst kann kurz nach dem
+# App-Start noch mitten im eigenen Hochfahren stecken (live beobachtet: der
+# allererste Versuch schlug fehl, ein Neuversuch kurz danach klappte). Ohne
+# diesen Zaehler blieb "Vorlesen" nach so einem einmaligen Ausrutscher fuer
+# den Rest der App-Sitzung stumm - kein Fehler mehr sichtbar, aber auch nie
+# wieder ein Ton.
+_TTS_MAX_FEHLSCHLAEGE = 3
 
 
 def _tts_erstellen():
@@ -138,7 +148,8 @@ def _tts_erstellen():
     ebenfalls kommentarlos. Deshalb wird _TTS_BEREIT erst dort gesetzt, nicht
     schon direkt nach dem Konstruktor.
     """
-    global _TTS_MOTOR, _TTS_BEREIT, _TTS_FEHLGESCHLAGEN, _INIT_HOERER
+    global _TTS_MOTOR, _TTS_BEREIT, _TTS_FEHLGESCHLAGEN, _TTS_FEHLSCHLAEGE
+    global _TTS_WIRD_ERSTELLT, _INIT_HOERER
     try:
         from jnius import PythonJavaClass, autoclass, java_method
 
@@ -152,22 +163,43 @@ def _tts_erstellen():
 
             @java_method("(I)V")
             def onInit(self, status):
-                global _TTS_BEREIT, _TTS_FEHLGESCHLAGEN
+                global _TTS_BEREIT, _TTS_FEHLGESCHLAGEN, _TTS_FEHLSCHLAEGE
+                global _TTS_WIRD_ERSTELLT
                 if status == TextToSpeech.SUCCESS:
                     _TTS_BEREIT = True
-                else:
-                    print(f"[Sprache] TextToSpeech-Init fehlgeschlagen (status={status})")
+                    _TTS_FEHLSCHLAEGE = 0
+                    return
+                _TTS_FEHLSCHLAEGE += 1
+                print(f"[Sprache] TextToSpeech-Init fehlgeschlagen "
+                      f"(status={status}, Versuch {_TTS_FEHLSCHLAEGE})")
+                if _TTS_FEHLSCHLAEGE >= _TTS_MAX_FEHLSCHLAEGE:
                     _TTS_FEHLGESCHLAGEN = True
+                else:
+                    # Naechster vorlesen()-Aufruf darf einen frischen Motor
+                    # aufbauen, statt fuer immer auf diesen kaputten zu warten.
+                    _TTS_WIRD_ERSTELLT = False
 
         # Der Hoerer muss am Leben bleiben, sonst raeumt Python ihn vorzeitig
         # weg und Android verliert die Rueckruf-Verbindung.
         _INIT_HOERER = _InitHoerer()
         motor = TextToSpeech(PythonActivity.mActivity, _INIT_HOERER)
-        motor.setLanguage(Locale.GERMANY)
+        ergebnis = motor.setLanguage(Locale.GERMANY)
+        # LANG_MISSING_DATA (-1) / LANG_NOT_SUPPORTED (-2): das Geraet hat
+        # keine deutsche Sprachdatenpaket fuer die Stimme installiert. Ohne
+        # diesen Rueckfall bliebe die Sprache des Motors in einem unklaren
+        # Zustand - lieber mit der Systemsprache vorlesen als gar nicht.
+        if ergebnis < 0:
+            print(f"[Sprache] Deutsch nicht verfuegbar (Code {ergebnis}), "
+                  f"nutze Systemsprache.")
+            motor.setLanguage(Locale.getDefault())
         _TTS_MOTOR = motor
     except Exception as exc:
         print(f"[Sprache] TextToSpeech konnte nicht gestartet werden: {exc}")
-        _TTS_FEHLGESCHLAGEN = True
+        _TTS_FEHLSCHLAEGE += 1
+        if _TTS_FEHLSCHLAEGE >= _TTS_MAX_FEHLSCHLAEGE:
+            _TTS_FEHLGESCHLAGEN = True
+        else:
+            _TTS_WIRD_ERSTELLT = False
 
 
 def vorlesen(text, _versuch=0):

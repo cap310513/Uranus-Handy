@@ -13,7 +13,10 @@ bringen. Deshalb spricht die Mobile-Version die Gemini-API direkt per REST an
 (nur 'requests', reines Python, keine Kompilierung noetig) - inhaltlich macht
 das keinen Unterschied, ruft dieselbe Gemini-API auf.
 """
+import base64
 import datetime
+import json
+import mimetypes
 import os
 
 import requests
@@ -210,3 +213,123 @@ def frage(chat, text):
     weiter - der Aufrufer entscheidet, wie er das im UI zeigt.
     """
     return chat.send_message(text)
+
+
+def frage_ohne_verlauf(text):
+    """
+    Eine einzelne, verlaufslose Anfrage - fuer kurze Zusatzfragen, die keinen
+    eigenen Gespraechsverlauf brauchen (z.B. die Mini-Chats unter den
+    Daily-Briefing-Karten, siehe briefing_screen.py). Wirft KeinApiKey oder
+    requests.HTTPError weiter, genau wie frage().
+    """
+    return _rufe_gemini([{"role": "user", "parts": [{"text": text}]}])
+
+
+def frage_mit_anweisung(text, anweisung):
+    """
+    Wie frage_ohne_verlauf(), aber mit einer EIGENEN System-Anweisung statt
+    der Uranus-Chat-Persona - fuer Werkzeuge, die einen ganz anderen Ton oder
+    Zweck brauchen (z.B. Lernzettel schreiben, Pruefungsfragen stellen, siehe
+    kern/lernen.py). Wirft KeinApiKey oder requests.HTTPError weiter, genau
+    wie frage().
+    """
+    schluessel = _hole_schluessel()
+    antwort = requests.post(
+        _API_URL,
+        params={"key": schluessel},
+        json={
+            "system_instruction": {"parts": [{"text": anweisung}]},
+            "contents": [{"role": "user", "parts": [{"text": text}]}],
+        },
+        timeout=45,
+    )
+    antwort.raise_for_status()
+    daten = antwort.json()
+    kandidaten = daten.get("candidates") or []
+    if not kandidaten:
+        return ""
+    teile = kandidaten[0].get("content", {}).get("parts", [])
+    return "".join(t.get("text", "") for t in teile).strip()
+
+
+def frage_mit_bild(bild_pfad, anweisung):
+    """
+    Wie frage_mit_anweisung(), aber mit einem BILD statt Text als Inhalt -
+    fuer die multimodale Quellenerkennung (Fotos von Handschrift,
+    Arbeitsblaettern, Vokabellisten - siehe kern/lernen.py: lies_bild()).
+
+    Nutzt Geminis eingebaute Bildfaehigkeit direkt ueber dieselbe REST-API
+    (ein "inline_data"-Teil statt "text" im Contents-Array) - bewusst KEIN
+    lokales OCR: eine OCR-Bibliothek (z.B. tesseract) waere auf Android ein
+    weiteres kompiliertes Abhaengigkeits-/Bau-Risiko (siehe Modul-Docstring
+    von kern/lernen.py fuer dieselbe Abwaegung bei .docx) und waere bei
+    Handschrift ohnehin deutlich ungenauer als Geminis Vision-Modell.
+
+    Wirft KeinApiKey, OSError (Datei nicht lesbar) oder requests.HTTPError
+    weiter - der Aufrufer entscheidet, wie er das im UI zeigt.
+    """
+    schluessel = _hole_schluessel()
+    mime_typ = mimetypes.guess_type(bild_pfad)[0] or "image/jpeg"
+    with open(bild_pfad, "rb") as datei:
+        bild_daten = base64.b64encode(datei.read()).decode("ascii")
+    antwort = requests.post(
+        _API_URL,
+        params={"key": schluessel},
+        json={
+            "system_instruction": {"parts": [{"text": anweisung}]},
+            "contents": [{"role": "user", "parts": [
+                {"inline_data": {"mime_type": mime_typ, "data": bild_daten}},
+            ]}],
+        },
+        # Laenger als die 45s bei Text-Anfragen: Fotos sind (auch nach
+        # Base64) deutlich groesser als ein Chat-Text, das Hochladen selbst
+        # braucht auf einer mobilen Verbindung spuerbar laenger.
+        timeout=60,
+    )
+    antwort.raise_for_status()
+    daten = antwort.json()
+    kandidaten = daten.get("candidates") or []
+    if not kandidaten:
+        return ""
+    teile = kandidaten[0].get("content", {}).get("parts", [])
+    return "".join(t.get("text", "") for t in teile).strip()
+
+
+def extrahiere_json(text, anweisung):
+    """
+    Schickt eine einzelne, verlaufslose Anfrage an Gemini und verlangt eine
+    Antwort im JSON-Format (die Gemini-API unterstuetzt das direkt ueber
+    generationConfig.responseMimeType - zuverlaessiger, als hinterher selbst
+    Freitext zu parsen). 'anweisung' beschreibt, welches JSON-Objekt
+    zurueckkommen soll (siehe briefing_screen.py fuer Beispiele).
+
+    Gibt das geparste Objekt zurueck, oder None bei jedem Fehler (kein
+    Schluessel, Netzwerkfehler, kein gueltiges JSON) - der Aufrufer
+    entscheidet dann selbst, wie er das im UI zeigt.
+    """
+    try:
+        schluessel = _hole_schluessel()
+    except KeinApiKey:
+        return None
+    try:
+        antwort = requests.post(
+            _API_URL,
+            params={"key": schluessel},
+            json={
+                "system_instruction": {"parts": [{"text": anweisung}]},
+                "contents": [{"role": "user", "parts": [{"text": text}]}],
+                "generationConfig": {"responseMimeType": "application/json"},
+            },
+            timeout=45,
+        )
+        antwort.raise_for_status()
+        daten = antwort.json()
+        kandidaten = daten.get("candidates") or []
+        if not kandidaten:
+            return None
+        teile = kandidaten[0].get("content", {}).get("parts", [])
+        roh = "".join(t.get("text", "") for t in teile).strip()
+        return json.loads(roh)
+    except Exception as exc:
+        print(f"[Gemini] extrahiere_json fehlgeschlagen: {exc}")
+        return None
