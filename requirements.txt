@@ -2,3 +2,5 @@ kivy
 kivymd
 google-genai
 python-dotenv
+pypdf
+plyer

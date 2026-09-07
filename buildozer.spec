@@ -27,12 +27,20 @@ version = 0.1
 # automatischen Versuchen) mit HTTP 502/504 ausgefallen. Deshalb eigene
 # Bauregel in p4a-recipes/freetype mit SourceForge als Quelle stattdessen
 # (siehe p4a.local_recipes unten).
-requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,pycairo,pillow,requests,python-dotenv
+requirements = python3,kivy==2.3.1,https://github.com/kivymd/KivyMD/archive/master.zip,asynckivy,asyncgui,materialyoucolor==3.0.4,materialshapes,pycairo,pillow,requests,python-dotenv,pypdf,plyer
 
 orientation = portrait
 fullscreen = 0
 
 # INTERNET wird fuer die Gemini-Anfragen gebraucht.
+#
+# Fuer den Datei-Upload im Lernen-Reiter (plyer.filechooser, siehe
+# app/screens/lernen_screen.py) ist BEWUSST KEINE Speicher-Berechtigung
+# eingetragen: plyer nutzt auf aktuellem Android den systemeigenen
+# Dokumenten-Picker (Storage Access Framework) - der braucht keine
+# READ/WRITE_EXTERNAL_STORAGE-Berechtigung, die App bekommt nur befristeten
+# Zugriff auf genau die ausgewaehlte Datei. Sollte sich das auf einem echten
+# Geraet als noetig herausstellen: hier ergaenzen.
 android.permissions = INTERNET
 
 # Noetig, damit TextToSpeech ("Antworten laut vorlesen", siehe

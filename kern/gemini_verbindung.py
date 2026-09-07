@@ -223,6 +223,33 @@ def frage_ohne_verlauf(text):
     return _rufe_gemini([{"role": "user", "parts": [{"text": text}]}])
 
 
+def frage_mit_anweisung(text, anweisung):
+    """
+    Wie frage_ohne_verlauf(), aber mit einer EIGENEN System-Anweisung statt
+    der Uranus-Chat-Persona - fuer Werkzeuge, die einen ganz anderen Ton oder
+    Zweck brauchen (z.B. Lernzettel schreiben, Pruefungsfragen stellen, siehe
+    kern/lernen.py). Wirft KeinApiKey oder requests.HTTPError weiter, genau
+    wie frage().
+    """
+    schluessel = _hole_schluessel()
+    antwort = requests.post(
+        _API_URL,
+        params={"key": schluessel},
+        json={
+            "system_instruction": {"parts": [{"text": anweisung}]},
+            "contents": [{"role": "user", "parts": [{"text": text}]}],
+        },
+        timeout=45,
+    )
+    antwort.raise_for_status()
+    daten = antwort.json()
+    kandidaten = daten.get("candidates") or []
+    if not kandidaten:
+        return ""
+    teile = kandidaten[0].get("content", {}).get("parts", [])
+    return "".join(t.get("text", "") for t in teile).strip()
+
+
 def extrahiere_json(text, anweisung):
     """
     Schickt eine einzelne, verlaufslose Anfrage an Gemini und verlangt eine
