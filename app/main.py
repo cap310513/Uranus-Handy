@@ -72,6 +72,7 @@ class UranusMobileApp(MDApp):
         Window.softinput_mode = "below_target"
 
         self.root_manager = MDScreenManager()
+        hud_optik.ohne_uebergang(self.root_manager)
         self.root_manager.add_widget(LoginScreen(on_erfolg=self._angemeldet))
         self.root_manager.add_widget(
             WelcomeBackScreen(on_weiter=self._angemeldet, on_anders=self._zu_login)
@@ -145,6 +146,7 @@ class UranusMobileApp(MDApp):
         wurzel.add_widget(self._baue_obere_leiste())
 
         self.screen_manager = MDScreenManager()
+        hud_optik.ohne_uebergang(self.screen_manager)
         self.screen_manager.add_widget(BriefingScreen())
         self.screen_manager.add_widget(ChatScreen())
         self.screen_manager.add_widget(LernenScreen())

@@ -13,8 +13,10 @@ bringen. Deshalb spricht die Mobile-Version die Gemini-API direkt per REST an
 (nur 'requests', reines Python, keine Kompilierung noetig) - inhaltlich macht
 das keinen Unterschied, ruft dieselbe Gemini-API auf.
 """
+import base64
 import datetime
 import json
+import mimetypes
 import os
 
 import requests
@@ -240,6 +242,49 @@ def frage_mit_anweisung(text, anweisung):
             "contents": [{"role": "user", "parts": [{"text": text}]}],
         },
         timeout=45,
+    )
+    antwort.raise_for_status()
+    daten = antwort.json()
+    kandidaten = daten.get("candidates") or []
+    if not kandidaten:
+        return ""
+    teile = kandidaten[0].get("content", {}).get("parts", [])
+    return "".join(t.get("text", "") for t in teile).strip()
+
+
+def frage_mit_bild(bild_pfad, anweisung):
+    """
+    Wie frage_mit_anweisung(), aber mit einem BILD statt Text als Inhalt -
+    fuer die multimodale Quellenerkennung (Fotos von Handschrift,
+    Arbeitsblaettern, Vokabellisten - siehe kern/lernen.py: lies_bild()).
+
+    Nutzt Geminis eingebaute Bildfaehigkeit direkt ueber dieselbe REST-API
+    (ein "inline_data"-Teil statt "text" im Contents-Array) - bewusst KEIN
+    lokales OCR: eine OCR-Bibliothek (z.B. tesseract) waere auf Android ein
+    weiteres kompiliertes Abhaengigkeits-/Bau-Risiko (siehe Modul-Docstring
+    von kern/lernen.py fuer dieselbe Abwaegung bei .docx) und waere bei
+    Handschrift ohnehin deutlich ungenauer als Geminis Vision-Modell.
+
+    Wirft KeinApiKey, OSError (Datei nicht lesbar) oder requests.HTTPError
+    weiter - der Aufrufer entscheidet, wie er das im UI zeigt.
+    """
+    schluessel = _hole_schluessel()
+    mime_typ = mimetypes.guess_type(bild_pfad)[0] or "image/jpeg"
+    with open(bild_pfad, "rb") as datei:
+        bild_daten = base64.b64encode(datei.read()).decode("ascii")
+    antwort = requests.post(
+        _API_URL,
+        params={"key": schluessel},
+        json={
+            "system_instruction": {"parts": [{"text": anweisung}]},
+            "contents": [{"role": "user", "parts": [
+                {"inline_data": {"mime_type": mime_typ, "data": bild_daten}},
+            ]}],
+        },
+        # Laenger als die 45s bei Text-Anfragen: Fotos sind (auch nach
+        # Base64) deutlich groesser als ein Chat-Text, das Hochladen selbst
+        # braucht auf einer mobilen Verbindung spuerbar laenger.
+        timeout=60,
     )
     antwort.raise_for_status()
     daten = antwort.json()

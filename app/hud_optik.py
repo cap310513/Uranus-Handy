@@ -11,7 +11,9 @@ Jeder Bildschirm, der diese Funktionen nutzt, muss darum eine
 aktualisiere_theme()-Methode anbieten, die app/main.py (_theme_geaendert)
 nach jedem Wechsel aufruft - siehe dort.
 """
+from kivy.clock import Clock
 from kivy.graphics import Color, Line
+from kivy.uix.screenmanager import NoTransition
 from kivy.uix.widget import Widget
 
 # ----------------------------------------------------------------------
@@ -68,6 +70,34 @@ def volle_breite(knopf):
     """
     knopf.theme_width = "Custom"
     knopf.size_hint_x = 1
+
+
+def ohne_uebergang(manager):
+    """
+    Schaltet die Screen-Wechsel-Animation eines MDScreenManager komplett ab.
+
+    Grund (live per Bildschirmaufnahme gemeldet: "erster Tap auf den +-Knopf
+    im Lernen-Reiter tut nichts, erst ein zweiter/dritter Tap wirkt"):
+    Kivys eingebauter ScreenManager verwirft JEDEN Touch vollstaendig,
+    waehrend eine Uebergangs-Animation noch laeuft (siehe
+    kivy/uix/screenmanager.py, ScreenManager.on_touch_down:
+    "if self.transition.is_active: return False" - kein Weiterreichen an
+    Kindwidgets, der Touch ist komplett weg). KivyMDs MDScreenManager setzt
+    per Clock.schedule_once(self.check_transition) ERST EINEN Tick nach dem
+    Erzeugen automatisch eine animierte MDSharedAxisTransition (mehrere
+    hundert ms Laufzeit) - faellt ein Fingertipp kurz nach einem Reiter-
+    oder Bildschirmwechsel in dieses Zeitfenster (sehr wahrscheinlich bei
+    zuegiger Bedienung), scheint er wirkungslos zu verpuffen.
+
+    Ein direktes `manager.transition = NoTransition()` sofort nach dem
+    Erzeugen wuerde von genau diesem verzoegerten check_transition() beim
+    naechsten Tick wieder ueberschrieben (es ersetzt jede Transition, die
+    KEINE MDTransitionBase-Unterklasse ist). Deshalb wird der bereits
+    geplante Clock-Callback hier zuerst abbestellt, bevor er ueberhaupt
+    laufen kann.
+    """
+    Clock.unschedule(manager.check_transition)
+    manager.transition = NoTransition()
 
 
 def glow_anwenden(karte, theme, staerke=3, deckkraft=0.6):

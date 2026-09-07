@@ -48,6 +48,11 @@ from kern import gemini_verbindung
 # Endungen landen alle im Textdatei-Rueckfallpfad von lies_dokument().
 LESBARE_TYPEN = (".pdf", ".txt", ".md", ".markdown", ".py", ".csv", ".json")
 
+# Fotos (Handschrift, Arbeitsblaetter, Vokabellisten) - gehen NICHT durch
+# lies_dokument(), sondern durch lies_bild() (Gemini Vision statt lokalem
+# OCR, siehe dort).
+BILD_TYPEN = (".jpg", ".jpeg", ".png", ".webp")
+
 # So viel Text geht hoechstens an das Modell - laengere Dokumente werden gekuerzt.
 MAX_KONTEXT = 12000
 
@@ -96,6 +101,45 @@ def lies_dokument(pfad, max_zeichen=200_000):
         return "", f"Datei nicht lesbar: {type(fehler).__name__}: {fehler}"
 
 
+BILD_ERKENNUNG_SYSTEM = (
+    "Du liest Fotos von handschriftlichen Notizen, Arbeitsblättern oder "
+    "Vokabellisten für Lernende aus. Transkribiere den GESAMTEN lesbaren Text "
+    "möglichst genau (auch Handschrift). Erkennst du eine Struktur "
+    "(Überschriften, Vokabellisten der Form Fremdsprache = Übersetzung, "
+    "Aufzählungen, Rechenaufgaben), gib sie in derselben Struktur als reinen "
+    "Text wieder (keine Markdown-Formatierung nötig). Ist ein Teil "
+    "unleserlich, kennzeichne genau diese Stelle mit [unleserlich] statt zu "
+    "raten. Antworte NUR mit dem transkribierten Text, ohne Einleitung, "
+    "Kommentar oder Erklärung."
+)
+
+
+def lies_bild(pfad, melde=None):
+    """
+    (text, fehler) - laesst Gemini den Bildinhalt (Foto von Handschrift,
+    einem Arbeitsblatt oder einer Vokabelliste) auslesen und strukturiert
+    als Text wiedergeben. Siehe Modul-Docstring: bewusst kein lokales OCR
+    (Android-Bau-Risiko, ausserdem bei Handschrift ungenauer) - stattdessen
+    Geminis eigene multimodale Faehigkeit (kern/gemini_verbindung.py,
+    frage_mit_bild()).
+    """
+    melde = melde or (lambda _t: None)
+    if not os.path.exists(pfad):
+        return "", f"'{os.path.basename(pfad)}' gibt es nicht."
+    fehlt = _schluessel_fehler()
+    if fehlt:
+        return "", fehlt
+    melde("Lese Bildinhalt ...")
+    try:
+        text = gemini_verbindung.frage_mit_bild(pfad, BILD_ERKENNUNG_SYSTEM)
+    except Exception as fehler:
+        return "", f"Bild nicht lesbar: {type(fehler).__name__}: {fehler}"
+    text = text.strip()
+    if len(text) < 5:
+        return "", "Im Bild konnte kein Text erkannt werden."
+    return text, ""
+
+
 def kuerze(text, grenze=MAX_KONTEXT):
     """Lange Dokumente auf eine Laenge bringen, die das Modell verarbeiten kann."""
     text = (text or "").strip()
@@ -130,14 +174,15 @@ MINDMAP_SYSTEM = (
 )
 
 
-def baue_mindmap(stoff, thema="", melde=None):
+def baue_mindmap(stoff, thema="", melde=None, klassenstufe=None):
     """(mindmap_dict, fehler)"""
     melde = melde or (lambda _t: None)
     fehlt = _schluessel_fehler()
     if fehlt:
         return None, fehlt
     melde("Ordne den Stoff zu einer Mindmap ...")
-    frage = (f"Thema: {thema}\n\n" if thema else "") + \
+    frage = _stufen_hinweis(klassenstufe) + \
+            (f"Thema: {thema}\n\n" if thema else "") + \
             f"Material:\n{kuerze(stoff, 9000)}\n\nBaue daraus die Mindmap."
     daten = gemini_verbindung.extrahiere_json(frage, MINDMAP_SYSTEM)
     if not isinstance(daten, dict) or not daten.get("aeste"):
@@ -160,14 +205,15 @@ LERNZETTEL_SYSTEM = (
 )
 
 
-def baue_lernzettel(stoff, thema="", melde=None):
+def baue_lernzettel(stoff, thema="", melde=None, klassenstufe=None):
     """(markdown_text, fehler)"""
     melde = melde or (lambda _t: None)
     fehlt = _schluessel_fehler()
     if fehlt:
         return "", fehlt
     melde("Schreibe den Lernzettel ...")
-    frage = (f"Thema: {thema}\n\n" if thema else "") + \
+    frage = _stufen_hinweis(klassenstufe) + \
+            (f"Thema: {thema}\n\n" if thema else "") + \
             f"Material:\n{kuerze(stoff)}\n\nSchreibe den Lernzettel."
     try:
         text = gemini_verbindung.frage_mit_anweisung(frage, LERNZETTEL_SYSTEM)
@@ -190,14 +236,15 @@ KARTEN_SYSTEM = (
 )
 
 
-def baue_karten(stoff, thema="", anzahl=12, melde=None):
+def baue_karten(stoff, thema="", anzahl=12, melde=None, klassenstufe=None):
     """(karten_liste, fehler)"""
     melde = melde or (lambda _t: None)
     fehlt = _schluessel_fehler()
     if fehlt:
         return [], fehlt
     melde(f"Erstelle {anzahl} Karteikarten ...")
-    frage = (f"Thema: {thema}\n\n" if thema else "") + \
+    frage = _stufen_hinweis(klassenstufe) + \
+            (f"Thema: {thema}\n\n" if thema else "") + \
             f"Material:\n{kuerze(stoff)}\n\nErstelle genau {anzahl} Karteikarten."
     daten = gemini_verbindung.extrahiere_json(frage, KARTEN_SYSTEM)
     if isinstance(daten, dict):
@@ -218,6 +265,81 @@ def baue_karten(stoff, thema="", anzahl=12, melde=None):
     return karten, ""
 
 
+# ------------------------------------------------------- Sprachfach-Vokabeln
+
+# Anhand des Fach-Namens erkannte Sprachfaecher (Substring-Suche, klein
+# geschrieben) - loest die automatische Vokabelpruefung aus (siehe
+# _QuelleTab in app/screens/lernen_screen.py).
+_SPRACHFAECHER = (
+    "französisch", "franzosisch", "englisch", "spanisch", "latein",
+    "italienisch", "russisch", "türkisch", "turkisch", "arabisch",
+    "chinesisch", "japanisch", "niederländisch", "niederlaendisch",
+    "portugiesisch", "polnisch", "griechisch", "schwedisch",
+)
+
+
+def erkenne_sprachfach(fach_name):
+    """Liefert den erkannten Sprachnamen (klein geschrieben), oder "" wenn
+    der Fach-Name keine bekannte Fremdsprache erkennen laesst."""
+    name = (fach_name or "").strip().lower()
+    for sprache in _SPRACHFAECHER:
+        if sprache in name:
+            return sprache
+    return ""
+
+
+def _vokabel_pruefung_system(sprache):
+    return (
+        f"Du bist Sprachlehrer/in für {sprache.capitalize()}. Der Nutzer hat einen Text "
+        f"oder eine Vokabelliste eingereicht. Prüfe JEDES enthaltene Wort/jede Phrase in "
+        f"der Fremdsprache ({sprache.capitalize()}) auf Rechtschreibung und Grammatik, und "
+        "- falls eine deutsche Übersetzung danebensteht - auch auf deren Richtigkeit.\n"
+        "Antworte AUSSCHLIESSLICH mit JSON in dieser Form:\n"
+        '{"karten": [{"frage": "korrektes fremdsprachiges Wort/Phrase", '
+        '"antwort": "korrekte deutsche Übersetzung", "thema": "..."}]}\n'
+        "Regeln: Korrigiere Rechtschreib-/Grammatikfehler in der Frage DIREKT (kein "
+        "Hinweis nötig, einfach die richtige Schreibweise). War die im Material "
+        "angegebene Übersetzung falsch, nimm in der Antwort die RICHTIGE Übersetzung, "
+        'ergänze aber in Klammern \'(im Material stand: "<falsche Übersetzung>")\', '
+        "damit der Lernende seinen Fehler sieht. Nur echte Vokabeln/kurze Wendungen als "
+        "eigene Karte, keine ganzen Fließtext-Sätze wiederholen, keine Duplikate. Alles "
+        "auf Deutsch außer der Fremdsprache selbst."
+    )
+
+
+def pruefe_vokabeln(text, sprache, melde=None, klassenstufe=None):
+    """
+    (karten_liste, fehler) - prueft eine Vokabelliste/einen Text in einer
+    Fremdsprache auf Rechtschreibung/Grammatik/Uebersetzung und liefert das
+    Ergebnis direkt als Karteikarten-Liste (siehe neue_karte()), bereit zum
+    Uebernehmen in fach["karten"].
+    """
+    melde = melde or (lambda _t: None)
+    fehlt = _schluessel_fehler()
+    if fehlt:
+        return [], fehlt
+    melde(f"Prüfe Vokabeln ({sprache}) ...")
+    frage = _stufen_hinweis(klassenstufe) + \
+            f"Material:\n{kuerze(text)}\n\nPrüfe die Vokabeln."
+    daten = gemini_verbindung.extrahiere_json(frage, _vokabel_pruefung_system(sprache))
+    if isinstance(daten, dict):
+        daten = daten.get("karten") or []
+    if not isinstance(daten, list) or not daten:
+        return [], "Das Modell hat keine brauchbaren Vokabeln geliefert."
+    karten = []
+    for eintrag in daten:
+        if not isinstance(eintrag, dict):
+            continue
+        frage_text = str(eintrag.get("frage") or "").strip()
+        antwort = str(eintrag.get("antwort") or "").strip()
+        if frage_text and antwort:
+            karten.append(neue_karte(frage_text, antwort,
+                                     str(eintrag.get("thema") or sprache).strip()))
+    if not karten:
+        return [], "Die Vokabelprüfung ergab keine verwertbaren Karten."
+    return karten, ""
+
+
 # ---------------------------------------------------------------- Lückentext
 
 LUECKENTEXT_SYSTEM = (
@@ -235,14 +357,15 @@ LUECKENTEXT_SYSTEM = (
 )
 
 
-def baue_luckentext(stoff, thema="", melde=None):
+def baue_luckentext(stoff, thema="", melde=None, klassenstufe=None):
     """(luckentext_dict, fehler) - dict mit 'titel', 'text', 'luecken'."""
     melde = melde or (lambda _t: None)
     fehlt = _schluessel_fehler()
     if fehlt:
         return None, fehlt
     melde("Baue den Lückentext ...")
-    frage = (f"Thema: {thema}\n\n" if thema else "") + \
+    frage = _stufen_hinweis(klassenstufe) + \
+            (f"Thema: {thema}\n\n" if thema else "") + \
             f"Material:\n{kuerze(stoff)}\n\nErstelle daraus den Lückentext."
     daten = gemini_verbindung.extrahiere_json(frage, LUECKENTEXT_SYSTEM)
     brauchbar = (isinstance(daten, dict) and isinstance(daten.get("text"), str)
@@ -360,13 +483,14 @@ def _echte_liste(werte):
     return sauber
 
 
-def naechste_frage(stoff, thema="", gestellt=(), melde=None):
+def naechste_frage(stoff, thema="", gestellt=(), melde=None, klassenstufe=None):
     """(frage, fehler)"""
     fehlt = _schluessel_fehler()
     if fehlt:
         return "", fehlt
     bisher = "\n".join(f"- {f}" for f in list(gestellt)[-6:])
-    frage = (f"Thema: {thema}\n\n" if thema else "") + \
+    frage = _stufen_hinweis(klassenstufe) + \
+            (f"Thema: {thema}\n\n" if thema else "") + \
             f"Stoff:\n{kuerze(stoff, 6000)}\n\n" + \
             (f"Diese Fragen wurden schon gestellt, stelle eine andere:\n{bisher}\n\n"
              if bisher else "") + "Stelle die nächste Prüfungsfrage."
@@ -380,12 +504,13 @@ def naechste_frage(stoff, thema="", gestellt=(), melde=None):
     return text, ""
 
 
-def bewerte_antwort(frage, antwort, stoff=""):
+def bewerte_antwort(frage, antwort, stoff="", klassenstufe=None):
     """(bewertung_dict, fehler)"""
     fehlt = _schluessel_fehler()
     if fehlt:
         return None, fehlt
-    nutzer = (f"Stoff:\n{kuerze(stoff, 5000)}\n\n" if stoff else "") + \
+    nutzer = _stufen_hinweis(klassenstufe) + \
+             (f"Stoff:\n{kuerze(stoff, 5000)}\n\n" if stoff else "") + \
              f"Frage: {frage}\n\nAntwort des Prüflings: {antwort}\n\nBewerte."
     daten = gemini_verbindung.extrahiere_json(nutzer, PRUEFER_BEWERTUNG_SYSTEM)
     if not isinstance(daten, dict) or "punkte" not in daten:
@@ -470,9 +595,35 @@ def neues_fach(name):
             "zusammenfassung": "", "luckentext": None, "mindmap": None, "karten": []}
 
 
-def neuer_kurs(name):
+def neuer_kurs(name, klassenstufe=8):
     return {"id": _neue_id("k"), "name": (name or "Neuer Kurs").strip()[:60] or "Neuer Kurs",
-            "erstellt": time.strftime("%Y-%m-%d"), "faecher": []}
+            "erstellt": time.strftime("%Y-%m-%d"), "faecher": [],
+            "klassenstufe": max(1, min(12, int(klassenstufe or 8)))}
+
+
+def effektive_klassenstufe(klassenstufe):
+    """
+    Berliner Anforderungsniveau: ab Klasse 5 gilt "Uranus Klasse N" fachlich
+    als Anforderungsniveau "Klasse N+1" (Berliner Schulsystem-Konvention,
+    vom Nutzer so vorgegeben) - alle Aufgaben/Karten/Fragen/Mindmaps sollen
+    entsprechend eine Stufe schwerer ausfallen, sobald die gewaehlte
+    Klassenstufe 5 oder hoeher ist.
+    """
+    stufe = max(1, min(12, int(klassenstufe or 8)))
+    return stufe + 1 if stufe >= 5 else stufe
+
+
+def _stufen_hinweis(klassenstufe):
+    """Ein Kontextsatz fuers Modell, IMMER genau EINMAL vor Thema/Material
+    gestellt - keine eigene System-Anweisung noetig, dieselbe Anweisung
+    passt fuer alle vier Werkzeuge (Mindmap/Lernzettel/Karten/Luecken/
+    Pruefung)."""
+    if not klassenstufe:
+        return ""
+    effektiv = effektive_klassenstufe(klassenstufe)
+    return (f"Zielstufe: Klasse {effektiv} (Anforderungsniveau). Passe Wortwahl, "
+            f"Komplexitaet und Aufgabenschwierigkeit GENAU auf dieses Niveau an - "
+            f"nicht leichter, nicht schwerer.\n\n")
 
 
 def lade_kurse(benutzer):
@@ -488,9 +639,9 @@ def speichere_kurse(benutzer, daten):
     _schreibe_json(_kurse_ablage(benutzer), daten)
 
 
-def kurs_hinzufuegen(benutzer, name):
+def kurs_hinzufuegen(benutzer, name, klassenstufe=8):
     daten = lade_kurse(benutzer)
-    kurs = neuer_kurs(name)
+    kurs = neuer_kurs(name, klassenstufe)
     daten["kurse"].append(kurs)
     speichere_kurse(benutzer, daten)
     return kurs

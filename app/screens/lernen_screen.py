@@ -132,6 +132,7 @@ class LernenScreen(MDScreen):
         self.fach_id = None
 
         self._ebenen = MDScreenManager()
+        hud_optik.ohne_uebergang(self._ebenen)
         self._kurse_ebene = _KurseEbene(self)
         self._faecher_ebene = _FaecherEbene(self)
         self._fach_ebene = _FachEbene(self)
@@ -168,12 +169,51 @@ class LernenScreen(MDScreen):
         _, fach = lernen.finde_fach(daten, self.kurs_id, self.fach_id)
         return fach
 
+    def aktueller_kurs(self):
+        daten = lernen.lade_kurse(self.benutzer)
+        kurs, _ = lernen.finde_fach(daten, self.kurs_id, self.fach_id)
+        return kurs
+
     def fach_speichern(self, fach):
         lernen.fach_speichern(self.benutzer, self.kurs_id, fach)
 
     def aktualisiere_theme(self):
         for ebene in (self._kurse_ebene, self._faecher_ebene, self._fach_ebene):
             ebene.aktualisiere_theme()
+
+
+class _KlassenstufeZeile(MDBoxLayout):
+    """Klassenstufe 1-12 fuer einen neuen Kurs - Stufen-Auswahl statt eines
+    Dropdowns (auf einem Handy zuverlaessiger antippbar). Zeigt direkt an,
+    wenn die Berliner Anforderungsniveau-Anhebung greift (siehe
+    kern/lernen.py, effektive_klassenstufe()) - macht die automatische
+    Anpassung fuer den Nutzer nachvollziehbar statt eine stille Blackbox
+    zu sein."""
+
+    def __init__(self, **kwargs):
+        super().__init__(orientation="horizontal", size_hint_y=None, height="40dp",
+                         spacing="6dp", padding=("16dp", "0dp"), **kwargs)
+        self.wert = 8
+        self.add_widget(MDLabel(text="Klassenstufe", theme_text_color="Secondary",
+                                adaptive_height=True, size_hint_x=None, width="98dp"))
+        runter = MDIconButton(icon="minus", ripple_canvas_after=False)
+        runter.bind(on_release=lambda *_: self._aendern(-1))
+        self.add_widget(runter)
+        self._anzeige = MDLabel(text="", adaptive_height=True, halign="center")
+        self.add_widget(self._anzeige)
+        hoch = MDIconButton(icon="plus", ripple_canvas_after=False)
+        hoch.bind(on_release=lambda *_: self._aendern(1))
+        self.add_widget(hoch)
+        self._aktualisiere_anzeige()
+
+    def _aendern(self, delta):
+        self.wert = max(1, min(12, self.wert + delta))
+        self._aktualisiere_anzeige()
+
+    def _aktualisiere_anzeige(self):
+        effektiv = lernen.effektive_klassenstufe(self.wert)
+        zusatz = f"  (-> Niveau {effektiv}, Berlin)" if effektiv != self.wert else ""
+        self._anzeige.text = f"{self.wert}{zusatz}"
 
 
 class _KurseEbene(MDScreen):
@@ -200,6 +240,11 @@ class _KurseEbene(MDScreen):
         self._eingabe.opacity = 0
         wurzel.add_widget(self._eingabe)
 
+        self._klassenstufe_zeile = _KlassenstufeZeile()
+        self._klassenstufe_zeile.height = 0
+        self._klassenstufe_zeile.opacity = 0
+        wurzel.add_widget(self._klassenstufe_zeile)
+
         self._liste = MDBoxLayout(orientation="vertical", spacing="10dp", padding="16dp",
                                   size_hint_y=None, adaptive_height=True)
         scroll = MDScrollView()
@@ -211,11 +256,16 @@ class _KurseEbene(MDScreen):
         an = self._eingabe.height == 0
         self._eingabe.height = "52dp" if an else 0
         self._eingabe.opacity = 1 if an else 0
+        self._klassenstufe_zeile.height = "40dp" if an else 0
+        self._klassenstufe_zeile.opacity = 1 if an else 0
 
     def _kurs_angelegt(self, name):
         self._eingabe.height = 0
         self._eingabe.opacity = 0
-        kurs = lernen.kurs_hinzufuegen(self._eltern.benutzer, name)
+        self._klassenstufe_zeile.height = 0
+        self._klassenstufe_zeile.opacity = 0
+        kurs = lernen.kurs_hinzufuegen(self._eltern.benutzer, name,
+                                       self._klassenstufe_zeile.wert)
         self._eltern.zeige_faecher(kurs["id"])
 
     def aktualisieren(self):
@@ -229,9 +279,11 @@ class _KurseEbene(MDScreen):
             return
         for kurs in kurse:
             anzahl = len(kurs.get("faecher", []))
+            klassenstufe = kurs.get("klassenstufe", 8)
             self._liste.add_widget(_Zeile(
                 kurs.get("name", "Kurs"),
-                f"{anzahl} Fach{'' if anzahl == 1 else 'fächer'} · {kurs.get('erstellt', '')}",
+                f"Klasse {klassenstufe} · {anzahl} Fach{'' if anzahl == 1 else 'fächer'} · "
+                f"{kurs.get('erstellt', '')}",
                 (lambda k=kurs["id"]: self._eltern.zeige_faecher(k)),
                 (lambda k=kurs["id"]: self._kurs_loeschen(k)),
             ))
@@ -507,6 +559,10 @@ class _TabBasis(MDBoxLayout):
     def thema(self):
         return self.fach_ebene._thema_feld.text.strip()
 
+    def klassenstufe(self):
+        kurs = self.fach_ebene._eltern.aktueller_kurs()
+        return (kurs or {}).get("klassenstufe", 8)
+
     def aktualisieren(self):
         pass
 
@@ -522,7 +578,7 @@ class _QuelleTab(_TabBasis):
         oben = MDBoxLayout(orientation="horizontal", size_hint_y=None, height="48dp",
                            spacing="8dp", padding=("12dp", "6dp"))
         hochladen = MDButton(style="tonal", ripple_canvas_after=False)
-        hochladen.add_widget(MDButtonText(text="Datei hochladen", halign="center"))
+        hochladen.add_widget(MDButtonText(text="Datei oder Foto hochladen", halign="center"))
         hochladen.bind(on_release=lambda *_: self._datei_waehlen())
         hud_optik.volle_breite(hochladen)
         oben.add_widget(hochladen)
@@ -563,7 +619,8 @@ class _QuelleTab(_TabBasis):
         try:
             filechooser.open_file(
                 on_selection=self._datei_gewaehlt,
-                filters=[["Dokumente", "*.pdf", "*.txt", "*.md"]],
+                filters=[["Dokumente", "*.pdf", "*.txt", "*.md"],
+                        ["Fotos (Handschrift, Arbeitsblätter)", "*.jpg", "*.jpeg", "*.png"]],
                 multiple=True,
             )
         except Exception as exc:
@@ -578,7 +635,13 @@ class _QuelleTab(_TabBasis):
     def _lese_worker(self, pfade):
         ergebnisse = []
         for pfad in pfade:
-            text, meldung = lernen.lies_dokument(pfad)
+            # Fotos gehen NICHT durch die Text-/PDF-Extraktion, sondern durch
+            # Geminis Bilderkennung (siehe kern/lernen.py: lies_bild()) -
+            # kein lokales OCR noetig.
+            if os.path.splitext(pfad)[1].lower() in lernen.BILD_TYPEN:
+                text, meldung = lernen.lies_bild(pfad)
+            else:
+                text, meldung = lernen.lies_dokument(pfad)
             ergebnisse.append((os.path.basename(pfad), text, meldung))
         Clock.schedule_once(lambda dt: self._quellen_geladen(ergebnisse))
 
@@ -586,11 +649,12 @@ class _QuelleTab(_TabBasis):
         fach = self.fach()
         if fach is None:
             return
-        hinzugefuegt, fehlgeschlagen = [], []
+        hinzugefuegt, fehlgeschlagen, neue_texte = [], [], []
         for name, text, meldung in ergebnisse:
             if text:
                 fach.setdefault("quellen", []).append({"name": name, "text": text})
                 hinzugefuegt.append(name)
+                neue_texte.append(text)
             else:
                 fehlgeschlagen.append(f"{name}: {meldung}")
         self.speichern(fach)
@@ -601,6 +665,8 @@ class _QuelleTab(_TabBasis):
                 "; ".join(fehlgeschlagen)
         self.status(meldung or "Keine der Dateien konnte gelesen werden.",
                    bool(fehlgeschlagen) and not hinzugefuegt)
+        if neue_texte:
+            self._vokabelpruefung_falls_sprachfach(fach, "\n\n".join(neue_texte))
 
     def _text_uebernehmen(self):
         text = self._text_feld.text.strip()
@@ -615,6 +681,46 @@ class _QuelleTab(_TabBasis):
         self.speichern(fach)
         self.aktualisieren()
         self.status("Text übernommen.")
+        self._vokabelpruefung_falls_sprachfach(fach, text)
+
+    def _vokabelpruefung_falls_sprachfach(self, fach, neuer_text):
+        """
+        Bei Sprachfaechern (Franzoesisch, Englisch, ...) wird jeder neu
+        hinzugefuegte Text/jede Vokabelliste automatisch im Hintergrund auf
+        Rechtschreibung/Uebersetzung/Grammatik geprueft (kern/lernen.py,
+        pruefe_vokabeln()) - das Ergebnis landet direkt als Karteikarten im
+        Reiter "Karteikarten", ohne dass der Nutzer extra etwas anstossen
+        muss. Kein Sprachfach oder zu kurzer Text: einfach nichts tun.
+        """
+        sprache = lernen.erkenne_sprachfach(fach.get("name", ""))
+        if not sprache or len(neuer_text.strip()) < 10:
+            return
+        self.status(f"Prüfe Vokabeln ({sprache.capitalize()}) im Hintergrund ...")
+        threading.Thread(
+            target=self._vokabel_worker, args=(neuer_text, sprache, self.klassenstufe()),
+            daemon=True,
+        ).start()
+
+    def _vokabel_worker(self, text, sprache, klassenstufe):
+        karten, fehler = lernen.pruefe_vokabeln(text, sprache, klassenstufe=klassenstufe)
+        Clock.schedule_once(lambda dt: self._vokabelpruefung_fertig(karten, fehler))
+
+    def _vokabelpruefung_fertig(self, karten, fehler):
+        # Ein automatischer Hintergrund-Check, der scheitert, ist kein Grund
+        # fuer eine Fehlermeldung, die den Nutzer stoert - er hat diesen
+        # Schritt ja nicht selbst angestossen.
+        if fehler or not karten:
+            return
+        fach = self.fach()
+        if fach is None:
+            return
+        vorhanden = {k.get("frage", "").strip().lower() for k in fach.get("karten", [])}
+        neu = [k for k in karten if k.get("frage", "").strip().lower() not in vorhanden]
+        if not neu:
+            return
+        fach.setdefault("karten", []).extend(neu)
+        self.speichern(fach)
+        self.status(f"{len(neu)} Vokabel-Karte(n) geprüft und in Karteikarten übernommen.")
 
     def aktualisieren(self):
         self._liste.clear_widgets()
@@ -729,10 +835,11 @@ class _KartenTab(_TabBasis):
             self.status("Erst Quellen hinzufügen (Reiter 'Quelle').", True)
             return
         self.status("Erstelle Karteikarten ...")
-        threading.Thread(target=self._worker, args=(stoff, self.thema()), daemon=True).start()
+        threading.Thread(target=self._worker, args=(stoff, self.thema(), self.klassenstufe()),
+                         daemon=True).start()
 
-    def _worker(self, stoff, thema):
-        karten, fehler = lernen.baue_karten(stoff, thema)
+    def _worker(self, stoff, thema, klassenstufe):
+        karten, fehler = lernen.baue_karten(stoff, thema, klassenstufe=klassenstufe)
         Clock.schedule_once(lambda dt: self._fertig(karten, fehler))
 
     def _fertig(self, karten, fehler):
@@ -837,10 +944,11 @@ class _ZettelTab(_TabBasis):
             self.status("Erst Quellen hinzufügen (Reiter 'Quelle').", True)
             return
         self.status("Schreibe die Zusammenfassung ...")
-        threading.Thread(target=self._worker, args=(stoff, self.thema()), daemon=True).start()
+        threading.Thread(target=self._worker, args=(stoff, self.thema(), self.klassenstufe()),
+                         daemon=True).start()
 
-    def _worker(self, stoff, thema):
-        text, fehler = lernen.baue_lernzettel(stoff, thema)
+    def _worker(self, stoff, thema, klassenstufe):
+        text, fehler = lernen.baue_lernzettel(stoff, thema, klassenstufe=klassenstufe)
         Clock.schedule_once(lambda dt: self._fertig(text, fehler))
 
     def _fertig(self, text, fehler):
@@ -928,10 +1036,11 @@ class _LueckenTab(_TabBasis):
             self.status("Erst Quellen hinzufügen (Reiter 'Quelle').", True)
             return
         self.status("Baue den Lückentext ...")
-        threading.Thread(target=self._worker, args=(stoff, self.thema()), daemon=True).start()
+        threading.Thread(target=self._worker, args=(stoff, self.thema(), self.klassenstufe()),
+                         daemon=True).start()
 
-    def _worker(self, stoff, thema):
-        daten, fehler = lernen.baue_luckentext(stoff, thema)
+    def _worker(self, stoff, thema, klassenstufe):
+        daten, fehler = lernen.baue_luckentext(stoff, thema, klassenstufe=klassenstufe)
         Clock.schedule_once(lambda dt: self._fertig(daten, fehler))
 
     def _fertig(self, daten, fehler):
@@ -1006,6 +1115,7 @@ class _PruefungTab(_TabBasis):
 
         self._stoff = ""
         self._thema = ""
+        self._klassenstufe = 8
         self._gestellt = []
         self._noten = []
         self._laeuft = False
@@ -1022,13 +1132,15 @@ class _PruefungTab(_TabBasis):
             return
         self._stoff = stoff
         self._thema = self.thema()
+        self._klassenstufe = self.klassenstufe()
         self._gestellt = []
         self._noten = []
         self.status("Stelle die erste Frage ...")
         threading.Thread(target=self._naechste_worker, daemon=True).start()
 
     def _naechste_worker(self):
-        frage, fehler = lernen.naechste_frage(self._stoff, self._thema, self._gestellt)
+        frage, fehler = lernen.naechste_frage(self._stoff, self._thema, self._gestellt,
+                                              klassenstufe=self._klassenstufe)
         Clock.schedule_once(lambda dt: self._frage_da(frage, fehler))
 
     def _frage_da(self, frage, fehler):
@@ -1055,7 +1167,8 @@ class _PruefungTab(_TabBasis):
         threading.Thread(target=self._bewerten_worker, args=(antwort,), daemon=True).start()
 
     def _bewerten_worker(self, antwort):
-        bewertung, fehler = lernen.bewerte_antwort(self._gestellt[-1], antwort, self._stoff)
+        bewertung, fehler = lernen.bewerte_antwort(self._gestellt[-1], antwort, self._stoff,
+                                                   klassenstufe=self._klassenstufe)
         Clock.schedule_once(lambda dt: self._bewertung_da(bewertung, fehler))
 
     def _bewertung_da(self, bewertung, fehler):
@@ -1138,10 +1251,11 @@ class _MindmapTab(_TabBasis):
             self.status("Erst Quellen hinzufügen (Reiter 'Quelle').", True)
             return
         self.status("Ordne den Stoff zu einer Mindmap ...")
-        threading.Thread(target=self._worker, args=(stoff, self.thema()), daemon=True).start()
+        threading.Thread(target=self._worker, args=(stoff, self.thema(), self.klassenstufe()),
+                         daemon=True).start()
 
-    def _worker(self, stoff, thema):
-        daten, fehler = lernen.baue_mindmap(stoff, thema)
+    def _worker(self, stoff, thema, klassenstufe):
+        daten, fehler = lernen.baue_mindmap(stoff, thema, klassenstufe=klassenstufe)
         Clock.schedule_once(lambda dt: self._fertig(daten, fehler))
 
     def _fertig(self, daten, fehler):
