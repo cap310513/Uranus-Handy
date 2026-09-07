@@ -15,8 +15,9 @@ Stapel samt SM-2-Wiederholungsplan (kern/lernen.py) - alles dauerhaft
 gespeichert.
 
 Die Mindmap-Grafik selbst (Reiter "Mindmap") wird an anderer Stelle nativ in
-Kivy gezeichnet (ScatterLayout, siehe app/screens/mindmap_screen.py) - hier
-gibt es nur den Auftrag zum Generieren und eine kurze Textvorschau.
+Kivy gezeichnet (Scatter, siehe app/screens/mindmap_screen.py) - hier gibt es
+nur den Auftrag zum Generieren, eine kurze Textvorschau und den Knopf, der
+zur interaktiven Ansicht wechselt.
 """
 import os
 import re
@@ -1158,7 +1159,6 @@ class _MindmapTab(_TabBasis):
         daten = fach.get("mindmap") if fach else None
         if not daten:
             return
-        # Die interaktive Mindmap-Grafik (ScatterLayout-Ansicht) kommt in
-        # einer der naechsten Ausbaustufen - bis dahin ehrlich sagen, dass
-        # der Knopf noch nichts oeffnet, statt so zu tun als ob.
-        self.status("Die interaktive Mindmap-Ansicht folgt im nächsten Schritt.")
+        app = MDApp.get_running_app()
+        app.screen_manager.get_screen("mindmap").zeige(daten)
+        app.screen_manager.current = "mindmap"

@@ -42,6 +42,7 @@ from app.screens.briefing_screen import BriefingScreen  # noqa: E402
 from app.screens.chat_screen import ChatScreen  # noqa: E402
 from app.screens.lernen_screen import LernenScreen  # noqa: E402
 from app.screens.login_screen import LoginScreen  # noqa: E402
+from app.screens.mindmap_screen import MindmapScreen  # noqa: E402
 from app.screens.settings_screen import SettingsScreen  # noqa: E402
 from app.screens.welcome_back_screen import WelcomeBackScreen  # noqa: E402
 from kern import konten, system_raender  # noqa: E402
@@ -130,6 +131,7 @@ class UranusMobileApp(MDApp):
         self.screen_manager.get_screen("briefing").aktualisiere_theme()
         self.screen_manager.get_screen("chat").aktualisiere_theme()
         self.screen_manager.get_screen("lernen").aktualisiere_theme()
+        self.screen_manager.get_screen("mindmap").aktualisiere_theme()
         self.screen_manager.get_screen("settings").aktualisiere_theme()
 
     def _baue_hauptbereich(self):
@@ -146,6 +148,7 @@ class UranusMobileApp(MDApp):
         self.screen_manager.add_widget(BriefingScreen())
         self.screen_manager.add_widget(ChatScreen())
         self.screen_manager.add_widget(LernenScreen())
+        self.screen_manager.add_widget(MindmapScreen())
         self.screen_manager.add_widget(SettingsScreen())
         wurzel.add_widget(self.screen_manager)
 
